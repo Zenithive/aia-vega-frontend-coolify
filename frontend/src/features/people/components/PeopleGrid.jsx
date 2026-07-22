@@ -69,7 +69,11 @@ export default function PeopleGrid({ pagedPeople, selectedEmployeeId, handleSele
             </div>
             <div className="flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-gray-text" />
-              <span className="truncate text-gray-text">Joined {new Date(person.joinDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              <span className="truncate text-gray-text">
+                {person.joinDate
+                  ? `Joined ${new Date(person.joinDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                  : '—'}
+              </span>
             </div>
           </div>
           <Button
