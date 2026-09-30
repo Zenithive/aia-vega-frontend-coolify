@@ -8,7 +8,7 @@ import SurfaceCard from '@/components/common/SurfaceCard';
 import Loader from '@/components/common/Loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, MoreVertical, ChevronRight, Clock, BookOpen, Users, Award } from 'lucide-react';
+import { PlayCircle, MoreVertical, ChevronRight, Clock, BookOpen, GitBranch,Layers, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadAllCourses } from '@/features/courses/coursesSlice';
@@ -619,6 +619,10 @@ export default function CoursesCategoryPage({ category }) {
                         <span className="flex items-center gap-1">
                           <BookOpen className="w-4 h-4" />
                           {course.modules} modules
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <GitBranch className="w-4 h-4" />
+                          Version {course.courseVersion} 
                         </span>
                         <span className="flex-1" />
                         <div className="relative ml-auto h-7 w-7 flex items-center justify-center">

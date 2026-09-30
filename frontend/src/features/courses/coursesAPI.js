@@ -125,11 +125,9 @@ function normalizeCourse(course) {
     minPassingScore: course.min_passing_score || 0,
     languages: courseLanguages,
     deadline: course.deadline || null,
-    prerequisite_courses: Array.isArray(course.prerequisite_courses)
-      ? course.prerequisite_courses
-      : course.prerequisite_courses
-        ? [course.prerequisite_courses]
-        : [],
+    // Course lineage: all versions of the same course share group_id; version is entered manually in admin.
+    courseVersion: course.course_version || '',
+    groupId: course.group_id || null,
     active: course.active !== 'unpublished',
   };
 }
@@ -329,8 +327,6 @@ const COURSES_LIST_PARAMS = {
   'populate[thumbnail]': true,
   'populate[quiz][populate][quiz_questions][populate][options]': true,
   'populate[modules]': true,
-  'populate[prerequisite_courses]': true,
-  
   'pagination[pageSize]': 50,
   sort: 'createdAt:desc',
 };
@@ -422,7 +418,6 @@ export const fetchCourseById = async (documentId, opts = {}) => {
     'populate[modules][populate]': '*',
     'populate[thumbnail]': true,
     'populate[feedback][populate][feedback_question]': true,
-    'populate[prerequisite_courses]': true,
     'populate[quiz][populate][quiz_questions][populate][options]': true,
     'populate[quiz][populate][quiz_instruction]': true,
     'populate[quiz][populate][quiz_instruction][populate][checklist]': true,
