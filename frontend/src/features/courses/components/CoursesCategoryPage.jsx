@@ -14,7 +14,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadAllCourses } from '@/features/courses/coursesSlice';
 import { selectCoursesList, selectCoursesLoading, selectCurrentPage, selectTotalPages } from '@/features/courses/coursesSelectors';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
-import { fetchCourseWorkflows, fetchUserCourseProgress } from '@/features/courses/coursesAPI';
+import { fetchUserCourseProgress } from '@/features/courses/coursesAPI';
 import { getLatestSubmission } from '../quizSubmissionAPI';
 import { getCurrentUserId } from '@/lib/auth';
 
@@ -40,48 +40,15 @@ export default function CoursesCategoryPage({ category }) {
   const totalPages = useAppSelector(selectTotalPages);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [feedbackEligibility, setFeedbackEligibility] = useState({});
-  const [courseWorkflows, setCourseWorkflows] = useState([]);
-  const [workflowLoaded, setWorkflowLoaded] = useState(false);
   const [startBlockModal, setStartBlockModal] = useState({
     open: false,
     title: '',
     message: '',
-    kind: 'block',
-    prerequisite: null,
-    managerName: '',
   });
-
-  const logWorkflowDebug = (label, payload) => {
-    if (process.env.NODE_ENV === 'production') return;
-    console.log(`[workflow-debug] ${label}`, payload);
-  };
 
   useEffect(() => {
     dispatch(loadAllCourses({ page: 1, pageSize: PAGE_SIZE }));
   }, [dispatch]);
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const workflows = await fetchCourseWorkflows();
-        if (!alive) return;
-        setCourseWorkflows(Array.isArray(workflows) ? workflows : []);
-      } catch (error) {
-        console.error('Failed to load course workflows:', error);
-        if (!alive) return;
-        setCourseWorkflows([]);
-      } finally {
-        if (!alive) return;
-        setWorkflowLoaded(true);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   // Handle loading next page
   const handleLoadMore = useCallback(() => {
@@ -239,157 +206,7 @@ export default function CoursesCategoryPage({ category }) {
     }
   };
 
-  const asComparableId = (value) => (value == null ? '' : String(value));
-
-  const matchesCourseRef = (courseRef, course) => {
-    if (!courseRef || !course) return false;
-    const currentId = asComparableId(course.id);
-    const currentDocumentId = asComparableId(course.documentId);
-    const refId = asComparableId(courseRef.id);
-    const refDocumentId = asComparableId(courseRef.documentId);
-    const currentTitle = String(course.title || '').trim().toLowerCase();
-    const refTitle = String(courseRef.title || '').trim().toLowerCase();
-
-    if (refId && currentId && refId === currentId) return true;
-    if (refDocumentId && currentDocumentId && refDocumentId === currentDocumentId) return true;
-    if (refTitle && currentTitle && refTitle === currentTitle) return true;
-    return false;
-  };
-
-  const preferredCourseReference = (value, fallback = null) => {
-    if (Array.isArray(value)) {
-      return value.length > 0 ? value : fallback;
-    }
-    return value || fallback;
-  };
-
-  const matchesAnyCourseRef = (courseRefs, course) => {
-    if (Array.isArray(courseRefs)) {
-      return courseRefs.some((ref) => matchesCourseRef(ref, course));
-    }
-    return matchesCourseRef(courseRefs, course);
-  };
-
-  const findCourseFromReference = (courseRef) => {
-    const refs = Array.isArray(courseRef) ? courseRef : [courseRef];
-    return allCourses.find((item) => refs.some((ref) => matchesCourseRef(ref, item))) || null;
-  };
-
-  const isPrerequisiteCourseCompleted = (course) => {
-    if (!course) return false;
-    if (course.progressStatus != null) {
-      return String(course.progressStatus).trim().toLowerCase() === 'completed';
-    }
-    return course.completed === true;
-  };
-
-  const isWorkflowAssignedToCurrentUser = (workflow, userId) => {
-    if (!workflow || !userId) return false;
-    const target = asComparableId(userId);
-    const users = Array.isArray(workflow.users) ? workflow.users : [];
-    if (users.length === 0 && Number.isFinite(workflow?.usersCount) && workflow.usersCount > 0) {
-      return true;
-    }
-    return users.some((user) => {
-      const id = asComparableId(user?.id);
-      const documentId = asComparableId(user?.documentId);
-      return (id && id === target) || (documentId && documentId === target);
-    });
-  };
-
-  const resolvePrerequisiteModule = (workflow, module) => {
-    if (!workflow || !module) return null;
-    let prerequisite = module.prerequisiteModule;
-    if (prerequisite == null) return null;
-
-    if (Array.isArray(prerequisite)) {
-      prerequisite = prerequisite[0] ?? null;
-    }
-    if (prerequisite == null) return null;
-
-    if (prerequisite?.data) {
-      prerequisite = prerequisite.data;
-    }
-
-    const rawPrerequisite = typeof prerequisite === 'object'
-      ? (prerequisite.id ?? prerequisite.moduleId ?? prerequisite.module_id ?? prerequisite.value)
-      : prerequisite;
-
-    const prerequisiteId = asComparableId(rawPrerequisite);
-    const prerequisiteNumeric = Number(rawPrerequisite);
-
-    if (prerequisiteId) {
-      const matched = workflow.modules.find((workflowModule) => {
-        const workflowModuleId = asComparableId(workflowModule?.id);
-        const workflowModuleDocumentId = asComparableId(workflowModule?.documentId);
-        return (workflowModuleId && workflowModuleId === prerequisiteId)
-          || (workflowModuleDocumentId && workflowModuleDocumentId === prerequisiteId);
-      });
-      if (matched) return matched;
-    }
-
-    if (Number.isInteger(prerequisiteNumeric) && prerequisiteNumeric >= 0) {
-      const byModuleIndex = workflow.modules.find((workflowModule) => workflowModule?.moduleIndex === prerequisiteNumeric);
-      if (byModuleIndex) return byModuleIndex;
-    }
-
-    if (typeof prerequisite === 'object') {
-      return {
-        id: prerequisite.id ?? null,
-        documentId: prerequisite.documentId ?? null,
-        moduleType: prerequisite.moduleType || prerequisite.module_type || '',
-        course: prerequisite.course || null,
-        offlineModules: Array.isArray(prerequisite.offlineModules)
-          ? prerequisite.offlineModules
-          : Array.isArray(prerequisite.offline_module)
-            ? prerequisite.offline_module
-            : [],
-      };
-    }
-
-    return null;
-  };
-
-  const hasOfflineValuesWithoutUsername = (offlineModules) => {
-    const entries = Array.isArray(offlineModules) ? offlineModules : [];
-    return entries.some((entry) => {
-      if (!entry || typeof entry !== 'object') return false;
-      const scoreFilled = entry.score != null;
-      const attemptFilled = entry.attempt != null;
-      const descriptionText = typeof entry.description === 'string'
-        ? entry.description.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
-        : '';
-      const descriptionFilled = descriptionText.length > 0;
-      const attachmentFilled = Array.isArray(entry.attachment)
-        ? entry.attachment.length > 0
-        : !!entry.attachment;
-
-      return scoreFilled || attemptFilled || descriptionFilled || attachmentFilled;
-    });
-  };
-
-  const findApplicableWorkflowModule = (course, workflowsInput = courseWorkflows) => {
-    const userId = getCurrentUserId();
-    if (!userId) return null;
-
-    const availableWorkflows = Array.isArray(workflowsInput) ? workflowsInput : [];
-
-    for (const workflow of availableWorkflows) {
-      if (!isWorkflowAssignedToCurrentUser(workflow, userId)) continue;
-
-      const workflowModules = Array.isArray(workflow.modules) ? workflow.modules : [];
-      const currentModule = workflowModules.find(
-        (item) => String(item?.moduleType || '').toLowerCase() === 'online' && matchesAnyCourseRef(preferredCourseReference(item?.courseRefs, item?.course), course)
-      );
-      if (currentModule) {
-        return { workflow, currentModule };
-      }
-    }
-
-    return null;
-  };
-
-  const handleStartCourse = async (event, course, courseUrl) => {
+  const handleStartCourse = (event, course, courseUrl) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -398,131 +215,15 @@ export default function CoursesCategoryPage({ category }) {
         open: true,
         title: 'Course Disabled',
         message: 'This course is disabled because the due date has passed. Please contact admin to update the due date.',
-        kind: 'deadline',
-        prerequisite: null,
-        managerName: '',
       });
       return;
     }
-
-    const currentUserId = getCurrentUserId();
-    logWorkflowDebug('start-click', {
-      currentUserId,
-      clickedCourse: {
-        id: course?.id,
-        documentId: course?.documentId,
-        title: course?.title,
-        progressStatus: course?.progressStatus,
-        completed: course?.completed,
-      },
-      workflowsLoaded: workflowLoaded,
-      cachedWorkflowCount: Array.isArray(courseWorkflows) ? courseWorkflows.length : 0,
-    });
-
-    let workflowsForCheck = Array.isArray(courseWorkflows) ? courseWorkflows : [];
-    try {
-      const freshWorkflows = await fetchCourseWorkflows({ fresh: true });
-      workflowsForCheck = Array.isArray(freshWorkflows) ? freshWorkflows : [];
-      setCourseWorkflows(workflowsForCheck);
-      logWorkflowDebug('start-click-fresh-workflow-fetch', {
-        fetchedWorkflowCount: workflowsForCheck.length,
-        workflows: workflowsForCheck,
-      });
-    } catch (error) {
-      console.error('Failed to fetch workflows before start:', error);
-    } finally {
-      setWorkflowLoaded(true);
-    }
-
-    const applicable = findApplicableWorkflowModule(course, workflowsForCheck);
-    logWorkflowDebug('applicable-workflow', applicable || null);
-    if (applicable) {
-      const prerequisiteModule = resolvePrerequisiteModule(applicable.workflow, applicable.currentModule);
-      const prerequisiteType = String(prerequisiteModule?.moduleType || '').trim().toLowerCase();
-      const prerequisiteCourseRef = preferredCourseReference(prerequisiteModule?.courseRefs, prerequisiteModule?.course);
-      const offlineModules = Array.isArray(prerequisiteModule?.offlineModules)
-        ? prerequisiteModule.offlineModules
-        : [];
-      logWorkflowDebug('resolved-prerequisite', {
-        prerequisiteModule,
-        prerequisiteType,
-        offlineModules,
-      });
-
-      if (prerequisiteType === 'offline') {
-        const hasOfflineValues = hasOfflineValuesWithoutUsername(offlineModules);
-        logWorkflowDebug('offline-prerequisite-block', {
-          workflow: applicable.workflow,
-          prerequisiteModule,
-          offlineModules,
-          hasOfflineValues,
-        });
-        if (hasOfflineValues) {
-          logWorkflowDebug('offline-prerequisite-filled-allow-navigation', {
-            courseUrl,
-            offlineModules,
-          });
-          router.push(courseUrl);
-          return;
-        }
-        const managerName = applicable.workflow?.managerName || 'your manager';
-        setStartBlockModal({
-          open: true,
-          title: 'Offline Prerequisite Required',
-          message: 'You have one offline module that must be completed before starting this course. Please contact your manager to complete it.',
-          kind: 'block-offline',
-          prerequisite: null,
-          managerName,
-        });
-        return;
-      }
-
-      if (prerequisiteType === 'online') {
-        const prerequisiteCourse = prerequisiteCourseRef;
-        const matchedCourse = findCourseFromReference(prerequisiteCourse);
-        const completed = isPrerequisiteCourseCompleted(matchedCourse);
-        logWorkflowDebug('online-prerequisite-course', {
-          prerequisiteCourse,
-          matchedCourse,
-          completed,
-        });
-
-        if (!completed) {
-          const linkedCourse = matchedCourse || prerequisiteCourse;
-          const courseName = linkedCourse?.title || 'Prerequisite course';
-          const courseCategory = String(linkedCourse?.category || 'all').toLowerCase();
-          const courseDocumentId = linkedCourse?.documentId || '';
-          const link = courseDocumentId ? `/courses/${courseCategory}/${courseDocumentId}` : '';
-
-          setStartBlockModal({
-            open: true,
-            title: 'Prerequisite Required',
-            message: 'You must complete prerequisite course first:',
-            kind: 'block-online',
-            prerequisite: { name: courseName, link },
-            managerName: '',
-          });
-          return;
-        }
-      }
-    }
-
-    logWorkflowDebug('navigation-allowed', {
-      courseUrl,
-    });
 
     router.push(courseUrl);
   };
 
   const closeStartModal = () => {
-    setStartBlockModal({
-      open: false,
-      title: '',
-      message: '',
-      kind: 'block',
-      prerequisite: null,
-      managerName: '',
-    });
+    setStartBlockModal({ open: false, title: '', message: '' });
   };
 
   const handleStartModalOk = () => {
@@ -743,32 +444,6 @@ export default function CoursesCategoryPage({ category }) {
             <p className="mt-3 text-sm text-gray-600 leading-6 whitespace-normal break-words">
               {startBlockModal.message}
             </p>
-            {startBlockModal.kind === 'block-online' && startBlockModal.prerequisite && (
-              <div className="mt-3">
-                <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700">
-                  <div className="leading-6 break-words"><span className="font-semibold">Course Name:</span> {startBlockModal.prerequisite.name}</div>
-                  <div className="leading-6 break-all">
-                    <span className="font-semibold">Course Redirection Link:</span>{' '}
-                    {startBlockModal.prerequisite.link ? (
-                      <Link
-                        href={startBlockModal.prerequisite.link}
-                        className="text-primary underline"
-                        onClick={closeStartModal}
-                      >
-                        {startBlockModal.prerequisite.link}
-                      </Link>
-                    ) : (
-                      <span className="text-gray-500">Not available</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-            {startBlockModal.kind === 'block-offline' && (
-              <div className="mt-3 rounded-md bg-gray-50 border border-gray-200 p-3 text-sm text-gray-700 leading-6 break-words">
-                <span className="font-semibold">Manager:</span> {startBlockModal.managerName || 'your manager'}
-              </div>
-            )}
             <div className="mt-5 flex justify-end">
               <Button
                 onClick={handleStartModalOk}

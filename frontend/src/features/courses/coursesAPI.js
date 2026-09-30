@@ -201,128 +201,6 @@ async function fetchCourseDueDateMap() {
   return dueDateMap;
 }
 
-function toArray(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value.data)) return value.data;
-  if (value.data) return [value.data];
-  return [value];
-}
-
-function toEntityObject(value) {
-  if (!value) return null;
-  const entity = value?.data ? value.data : value;
-  if (!entity) return null;
-  const attrs = entity.attributes || {};
-  return {
-    ...entity,
-    ...attrs,
-    id: entity.id ?? attrs.id ?? null,
-    documentId: entity.documentId ?? attrs.documentId ?? null,
-  };
-}
-
-function normalizeWorkflowUser(user) {
-  const entity = toEntityObject(user);
-  if (!entity) return null;
-  const id = entity.id ?? null;
-  const documentId = entity.documentId ?? null;
-  const username = entity.username || '';
-  if (id == null && documentId == null && !username) return null;
-  return {
-    id,
-    documentId,
-    username,
-  };
-}
-
-function normalizeWorkflowCourseRef(courseRef) {
-  const entity = toEntityObject(courseRef);
-  if (!entity) return null;
-  const id = entity.id ?? null;
-  const documentId = entity.documentId ?? null;
-  const title = entity.title || '';
-  const category = entity.course_category || entity.category || '';
-  if (id == null && documentId == null && !title) return null;
-  return {
-    id,
-    documentId,
-    title,
-    category,
-  };
-}
-
-function normalizeWorkflowCourseRefs(courseRefValue) {
-  return toArray(courseRefValue)
-    .map(normalizeWorkflowCourseRef)
-    .filter(Boolean);
-}
-
-function normalizeWorkflowOfflineModuleEntry(entry) {
-  const entity = toEntityObject(entry) || entry;
-  if (!entity) return null;
-  return {
-    id: entity.id ?? null,
-    username: entity.username || '',
-    score: entity.score ?? null,
-    attempt: entity.attempt ?? null,
-    description: entity.description ?? null,
-    attachment: entity.attachment ?? null,
-  };
-}
-
-function normalizeWorkflowModule(module, index) {
-  const entity = toEntityObject(module) || module;
-  if (!entity) return null;
-  const courseRefs = normalizeWorkflowCourseRefs(entity.course);
-  const offlineModules = toArray(entity.offline_module)
-    .map(normalizeWorkflowOfflineModuleEntry)
-    .filter(Boolean);
-  let prerequisiteModule = entity.prerequisite_modules ?? null;
-  if (Array.isArray(prerequisiteModule)) {
-    prerequisiteModule = prerequisiteModule[0] ?? null;
-  }
-  return {
-    id: entity.id ?? null,
-    documentId: entity.documentId ?? null,
-    moduleIndex: typeof index === 'number' ? index : null,
-    moduleType: entity.module_type || '',
-    course: courseRefs[0] || null,
-    courseRefs,
-    courseCount: Number.isFinite(Number(entity?.course?.count)) ? Number(entity.course.count) : null,
-    offlineModules,
-    prerequisiteModule,
-  };
-}
-
-function workflowManagerName(createdBy) {
-  const entity = toEntityObject(createdBy);
-  if (!entity) return '';
-  const fullName = [entity.firstname, entity.lastname].filter(Boolean).join(' ').trim();
-  return fullName || entity.username || entity.email || '';
-}
-
-function normalizeCourseWorkflow(workflow) {
-  const entity = toEntityObject(workflow) || workflow;
-  if (!entity) return null;
-  const usersRaw = entity.users_permissions_users;
-  const modules = toArray(entity.modules)
-    .map((module, index) => normalizeWorkflowModule(module, index))
-    .filter(Boolean);
-
-  return {
-    id: entity.id ?? null,
-    documentId: entity.documentId ?? null,
-    category: String(entity.category || '').toLowerCase(),
-    users: toArray(usersRaw)
-      .map(normalizeWorkflowUser)
-      .filter(Boolean),
-    usersCount: Number.isFinite(Number(usersRaw?.count)) ? Number(usersRaw.count) : null,
-    modules,
-    managerName: workflowManagerName(entity.createdBy),
-  };
-}
-
 const COURSES_LIST_PARAMS = {
   'populate[thumbnail]': true,
   'populate[quiz][populate][quiz_questions][populate][options]': true,
@@ -368,43 +246,6 @@ export const fetchAllCourses = async ({ page = 1, pageSize = 9 } = {}) => {
     totalPages: meta.pageCount || 1,
     currentPage: meta.page || page,
   };
-};
-
-const COURSE_WORKFLOWS_LIST_PARAMS = {
-  'populate[users_permissions_users]': true,
-  'populate[modules][populate][course]': true,
-  'populate[modules][populate][offline_module]': true,
-  'populate[createdBy][fields][0]': 'firstname',
-  'populate[createdBy][fields][1]': 'lastname',
-  'populate[createdBy][fields][2]': 'username',
-  'pagination[pageSize]': 50,
-  sort: 'createdAt:desc',
-};
-
-export const fetchCourseWorkflows = async (opts = {}) => {
-  const all = [];
-  let page = 1;
-  let pageCount = 1;
-
-  do {
-    const response = await api.get('/course-workflows', {
-      params: {
-        ...COURSE_WORKFLOWS_LIST_PARAMS,
-        'pagination[page]': page,
-        ...(opts.fresh ? { _t: Date.now() } : {}),
-      },
-    });
-    const data = Array.isArray(response?.data)
-      ? response.data
-      : Array.isArray(response)
-        ? response
-        : [];
-    all.push(...data);
-    pageCount = response?.meta?.pagination?.pageCount ?? 1;
-    page += 1;
-  } while (page <= pageCount);
-
-  return all.map(normalizeCourseWorkflow).filter(Boolean);
 };
 
 /**
@@ -551,8 +392,7 @@ export const fetchAllUserProgress = async (userId) => {
 export const fetchCourseCategories = fetchAllCourses;
 
 export default {
-  fetchAllCourses,
-  fetchCourseWorkflows,
+  fetchAllCourses,
   fetchCourseCategories,
   fetchCourseById,
 };
