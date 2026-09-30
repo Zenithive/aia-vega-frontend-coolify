@@ -112,7 +112,8 @@ function normalizeCourse(course) {
     feedback: Array.isArray(course.feedback)
       ? course.feedback.map(fb => ({
           ...fb,
-          feedback_question: Array.isArray(fb.feedback_question) ? fb.feedback_question : [],
+          // Questions now come from the linked Feedback Template
+          questions: Array.isArray(fb.feedback_template?.questions) ? fb.feedback_template.questions : [],
         }))
       : [],
     learners: 0,
@@ -258,7 +259,7 @@ export const fetchCourseById = async (documentId, opts = {}) => {
   const params = {
     'populate[modules][populate]': '*',
     'populate[thumbnail]': true,
-    'populate[feedback][populate][feedback_question]': true,
+    'populate[feedback][populate][feedback_template][populate][questions]': true,
     'populate[quiz][populate][quiz_questions][populate][options]': true,
     'populate[quiz][populate][quiz_instruction]': true,
     'populate[quiz][populate][quiz_instruction][populate][checklist]': true,
@@ -297,11 +298,12 @@ export const updateModuleMarkAsRead = async (courseDocumentId, moduleId, rawModu
   }, { timeout: 30000 });
 };
 
-export const markModuleProgress = async ({ userId, courseId, moduleId, timeSpentMinutes = 0, selectedLanguage = null, startedAt = null }) => {
+export const markModuleProgress = async ({ userId, courseId, moduleId, timeSpentMinutes = 0, selectedLanguage = null, startedAt = null, courseVersion = null }) => {
   return api.post('/user-progress/mark-module', {
     userId,
     courseId,
     moduleId,
+    course_version: courseVersion ? String(courseVersion) : null,
     last_accessed_at: new Date().toISOString(),
     time_spent_minutes: Number(timeSpentMinutes) || 0,
     selected_language: selectedLanguage || null,
@@ -314,11 +316,12 @@ export const markModuleProgress = async ({ userId, courseId, moduleId, timeSpent
  * Transition a course to In_progress without marking any module complete.
  * Called when the user first engages with content (video play, View Full Content).
  */
-export const startCourse = async ({ userId, courseId, language }) => {
+export const startCourse = async ({ userId, courseId, language, courseVersion = null }) => {
   return api.post('/user-progress/start-course', {
     userId: Number(userId),
     courseId,
     language,
+    course_version: courseVersion ? String(courseVersion) : null,
   });
 };
 
@@ -334,6 +337,7 @@ export const markModuleVideoProgress = async ({
   videoDurationMin = 0,
   timeWatchedMin = 0,
   videoCompletionType = 'full_watch',
+  courseVersion = null,
 }) => {
   const normalizedUserId = Number(userId);
   const normalizedCourseId = Number(courseId);
@@ -352,6 +356,7 @@ export const markModuleVideoProgress = async ({
     videoDurationMin: Number(videoDurationMin) || 0,
     timeWatchedMin: Number(timeWatchedMin) || 0,
     video_completion_type: videoCompletionType,
+    course_version: courseVersion ? String(courseVersion) : null,
     last_updated: new Date().toISOString(),
   });
 };
@@ -392,7 +397,7 @@ export const fetchAllUserProgress = async (userId) => {
 export const fetchCourseCategories = fetchAllCourses;
 
 export default {
-  fetchAllCourses,
+  fetchAllCourses,
   fetchCourseCategories,
   fetchCourseById,
 };

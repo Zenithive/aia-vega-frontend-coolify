@@ -462,7 +462,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           ? numericMaxAttempt + 1
           : undefined;
 
-      await sendReattemptRequest(Number(userId), Number(courseIdForApi), requestedForAttempt);
+      await sendReattemptRequest(Number(userId), Number(courseIdForApi), course?.courseVersion);
       writeReattemptMarker(userId, courseIdForApi, {
         status: 'pending',
         forAttempt: Number.isFinite(Number(requestedForAttempt)) && Number(requestedForAttempt) > 0
@@ -502,7 +502,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     if (!courseIdForApi) return;
     hasStartedRef.current = true;
     try {
-      await startCourse({ userId, courseId: courseIdForApi, language: selectedLanguage });
+      await startCourse({ userId, courseId: courseIdForApi, language: selectedLanguage, courseVersion: course?.courseVersion });
       setCourseProgress((p) => ({ ...p, progressStatus: 'In_progress' }));
     } catch (err) {
       hasStartedRef.current = false; // allow retry on next engagement
@@ -545,6 +545,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         moduleId: String(modId),
         timeSpentMinutes: timeWatchedMin,
         selectedLanguage,
+        courseVersion: course?.courseVersion,
         // Send started_at only when course hasn't been started yet (first module marked)
         startedAt: (!courseProgress.progressStatus || courseProgress.progressStatus === 'Not_started')
           ? new Date().toISOString()
@@ -567,6 +568,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           videoDurationMin: durationMin,
           timeWatchedMin,
           videoCompletionType: completionType,
+          courseVersion: course?.courseVersion,
         });
       } catch (err) {
         console.error('Failed to mark module (module-video-progress):', err?.message ?? err?.status ?? err);
@@ -735,7 +737,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
   // Feedback form: when user passed quiz but hasn't submitted feedback
   if (showFeedbackForm) {
     const feedbackForLang = feedbacks[0];
-    const feedbackQuestions = feedbackForLang?.feedback_question || [];
+    const feedbackQuestions = feedbackForLang?.questions || [];
     const userId = getCurrentUserId();
     const courseNumericId = course.id ?? course.documentId;
 
@@ -773,6 +775,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             }}
             userId={userId}
             courseId={courseNumericId}
+            courseVersion={course.courseVersion}
           />
         </PageContainer>
       </LayoutShell>
@@ -819,6 +822,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     <div className="min-h-screen bg-[#fafafa]" style={courseBgStyle}>
       <PageHeader
         title={course.title}
+        version ={course.courseVersion} 
         titleRight={
           languageOptions.length > 0 ? (
             <div className="flex items-center gap-2 bg-white/90 border border-gray-200 rounded-lg px-3 py-2 shadow-sm">

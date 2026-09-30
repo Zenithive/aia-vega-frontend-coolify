@@ -85,7 +85,7 @@ function StarRating({ value, onChange }) {
   );
 }
 
-export default function FeedbackForm({ questions, onCancel, onSubmit, userId, courseId }) {
+export default function FeedbackForm({ questions, onCancel, onSubmit, userId, courseId, courseVersion }) {
   const activeQuestions =
     Array.isArray(questions) && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
 
@@ -116,41 +116,27 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
     if (isSubmitting) return;
 
     // Build answers array: one entry per active feedback question
-    const answersArray = [
-      ...activeQuestions.map((q) => ({
-        question_id: q.question_id,
-        question: q.question || q.question_id,
-        answer_type: q.answer_type === 'Rating' ? 'Rating'
-          : q.answer_type === 'Text' ? 'Text'
-          : 'Text',
-        answer: String(answers[q.question_id] ?? ''),
-      })),
-      // {
-      //   question_id: 'course_rating',
-      //   question: 'Course rating',
-      //   answer_type: 'Rating',
-      //   answer: String(courseRating),
-      // },
-      // ...(additionalFeedback.trim()
-      //   ? [{
-      //       question_id: 'additional_feedback',
-      //       question: 'Additional feedback',
-      //       answer_type: 'Text',
-      //       answer: additionalFeedback.trim(),
-      //     }]
-      //   : []),
-    ];
+    const answersArray = activeQuestions.map((q) => ({
+      question_id: q.question_id,
+      question: q.question || q.question_id,
+      answer_type: q.answer_type === 'Rating' ? 'Rating'
+        : q.answer_type === 'Text' ? 'Text'
+        : 'Text',
+      answer: String(answers[q.question_id] ?? ''),
+    }));
 
     const payload = {
       data: {
         answers: answersArray,
         course: Number(courseId),
         users_permissions_user: Number(userId),
+        course_version: courseVersion ? String(courseVersion) : null,
       },
       // Keep flat fields too for custom backend controllers that read ctx.request.body directly.
       courseId: Number(courseId),
       userId: Number(userId),
       course: Number(courseId),
+      course_version: courseVersion ? String(courseVersion) : null,
       users_permissions_user: Number(userId),
       submitted_at: new Date().toISOString(),
     };
@@ -265,8 +251,6 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
               );
             })}
 
-
-
             {submitError && (
               <p className="text-sm text-red-600 mb-4">{submitError}</p>
             )}
@@ -274,26 +258,26 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
             <div className="px-6 sm:px-10 py-6">
               <div className="flex justify-start gap-3">
                 <button
-                type="button"
-                onClick={onCancel}
-                disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl border-2 border-primary bg-white text-primary font-semibold text-sm hover:bg-primary/5 transition disabled:opacity-50"
-              >
-                Cancel
+                  type="button"
+                  onClick={onCancel}
+                  disabled={isSubmitting}
+                  className="px-5 py-2.5 rounded-xl border-2 border-primary bg-white text-primary font-semibold text-sm hover:bg-primary/5 transition disabled:opacity-50"
+                >
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                disabled={isSubmitting}
+                  disabled={isSubmitting}
                   className="px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-35"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader size="sm" className="shrink-0" spinnerClassName="border-white border-t-white/30" />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Form'
-                )}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader size="sm" className="shrink-0" spinnerClassName="border-white border-t-white/30" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Form'
+                  )}
                 </button>
               </div>
             </div>

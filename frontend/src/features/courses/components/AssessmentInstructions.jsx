@@ -163,7 +163,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
   const feedbackForLang =
     (props.feedback || []).find(fb => fb.language === props.quiz?.language) ||
     (props.feedback || [])[0];
-  const feedbackQuestions = feedbackForLang?.feedback_question || [];
+  const feedbackQuestions = feedbackForLang?.questions || [];
   // compulsory is a yes-no-toggle custom field: true = mandatory, false/null = optional
   const feedbackCompulsory = feedbackForLang?.compulsory === true;
 
@@ -174,6 +174,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
         courseId={courseId}
         category={category}
         courseNumericId={props.courseNumericId}
+        courseVersion={props.courseVersion || null}
         userId={props.userId ?? getCurrentUserId()}
         quizQuestions={quizQuestions}
         resultData={resultData}

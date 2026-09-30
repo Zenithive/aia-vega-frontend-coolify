@@ -89,6 +89,7 @@ export default function AssessmentInstructionsRoutePage() {
       courseId={id}
       courseNumericId={course?.id}
       courseName={course?.title}
+      courseVersion={course?.courseVersion}
       quiz={quiz}
       feedback={feedback}
       onBeforeStartAssessment={handleBeforeStartAssessment}

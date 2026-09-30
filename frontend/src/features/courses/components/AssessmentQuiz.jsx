@@ -217,7 +217,7 @@ function getQuestionOptions(question) {
   });
 }
 
-export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, resultData: resultDataProp, feedbackQuestions, feedbackCompulsory, quizDuration }) {
+export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, resultData: resultDataProp, feedbackQuestions,courseVersion,feedbackCompulsory, quizDuration }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -347,9 +347,20 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
   };
 
-  const hasAnswered = answers[currentQuestion?.id] !== undefined && 
-    (!Array.isArray(answers[currentQuestion?.id]) || answers[currentQuestion?.id].length > 0);
+  const handleTextChange = (e) => {
+  const val = e.target.value;
+  setAnswers((prev) => ({
+    ...prev,
+    [currentQuestion.id]: val,
+  }));
+};
 
+  const currentAns = answers[currentQuestion?.id];
+  const isDescriptive = ['Descriptive', 'Text', 'Short_answer'].includes(currentQuestion?.question_type);
+
+  const hasAnswered = isDescriptive
+    ? typeof currentAns === 'string' && currentAns.trim().length > 0
+    : currentAns !== undefined && (!Array.isArray(currentAns) || currentAns.length > 0);
 
   const handleNext = () => {
     if (!hasAnswered) return;
@@ -363,27 +374,31 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     isSubmittingRef.current = true;
     setIsSubmitting(true);
 
+    // Inside performSubmit in AssessmentQuiz.jsx
     const answersArr = questions.map((q) => {
-      const selectedIdx = currentAnswers[q.id];
+      const selectedVal = currentAnswers[q.id];
+      const qType = q.question_type || 'Multiple_choice';
       const opts = getQuestionOptions(q);
-      const isMulti = q.question_type === 'Multiple_select';
 
       let answerPayload = {
         question_id: String(q.question_id || q.id),
         question: q.question_text || q.question || q.question_id || String(q.id),
-        question_type: q.question_type || 'Multiple_choice',
+        question_type: qType,
         point: q.point || 0,
       };
 
-      if (isMulti) {
-        const ansArray = Array.isArray(selectedIdx) ? selectedIdx : (selectedIdx !== undefined ? [selectedIdx] : []);
+      if (qType === 'Descriptive' || qType === 'Text' || qType === 'Short_answer') {
+        answerPayload.user_answer_for_descriptive_question = typeof selectedVal === 'string' ? selectedVal : '';
+      } else if (qType === 'Multiple_select') {
+        const ansArray = Array.isArray(selectedVal) ? selectedVal : (selectedVal !== undefined ? [selectedVal] : []);
         answerPayload.selected_answer_for_multiSelect = ansArray.map(idx => {
           const opt = opts[idx];
           return { option_key: opt?.option_key ?? String(idx ?? "") };
         });
       } else {
-        const selectedOption = selectedIdx !== undefined && !Array.isArray(selectedIdx) ? opts[selectedIdx] : null;
-        answerPayload.selected_answer_for_multiChoice = selectedOption?.option_key ?? String(selectedIdx ?? "");
+        // Multiple Choice
+        const selectedOption = selectedVal !== undefined && !Array.isArray(selectedVal) ? opts[selectedVal] : null;
+        answerPayload.selected_answer_for_multiChoice = selectedOption?.option_key ?? String(selectedVal ?? "");
       }
 
       return answerPayload;
@@ -393,7 +408,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       userId: Number(userId),
       courseId: Number(courseNumericId),
       answers: answersArr,
-      // Ensure non-zero quiz duration for analytics when submission happens under 60s.
+      course_version: courseVersion,
       time_taken_minutes: Math.max(1, Math.round((quizDurationSeconds - currentTimeLeft) / 60)),
       submitted_at: new Date().toISOString(),
       submission_type: submissionType,
@@ -521,7 +536,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       setSubmitted(true);
       setShowAutoSubmitModal(false);
     }
-  }, [questions, userId, courseNumericId, quizDurationSeconds]); 
+  }, [questions, userId, courseNumericId,courseVersion,quizDurationSeconds]); 
 
   const handleSubmit = async () => {
     if (!hasAnswered || isSubmitting) return;
@@ -581,6 +596,14 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     const handleKeyDown = (e) => {
       if (submittedRef.current || !quizStartedRef.current) return;
 
+      // 1. Allow typing inside input fields and textareas
+      const targetTag = e.target.tagName;
+      const isEditable = targetTag === 'INPUT' || targetTag === 'TEXTAREA' || e.target.isContentEditable;
+      if (isEditable) {
+        return; // Don't block keypresses when the user is typing an answer
+      }
+
+      // 2. Prevent page reload (F5 / Ctrl+R / Cmd+R)
       const isReload = e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r');
       if (isReload) {
         e.preventDefault();
@@ -592,6 +615,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         return;
       }
 
+      // 3. Block shortcut keys outside editable inputs
       if (!ALLOWED_KEYS.has(e.key)) {
         const isSystemKey = ['Control', 'Shift', 'Alt', 'Meta', 'Tab'].includes(e.key);
         if (!isSystemKey) {
@@ -682,7 +706,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         : Number.isFinite(numericMaxAttempt) && numericMaxAttempt > 0
           ? numericMaxAttempt + 1
           : undefined;
-      await sendReattemptRequest(Number(userId), Number(courseNumericId), requestedForAttempt);
+      await sendReattemptRequest(Number(userId), Number(courseNumericId), courseVersion);
       writeReattemptMarker(userId, courseNumericId, {
         status: 'pending',
         forAttempt: Number.isFinite(Number(requestedForAttempt)) && Number(requestedForAttempt) > 0
@@ -793,7 +817,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
             onCancel={closeFeedbackForm}
             onSubmit={handleFeedbackSubmit}
             userId={userId}
-            courseId={courseNumericId} 
+            courseId={courseNumericId}
+            courseVersion={courseVersion}
           />
         </PageContainer>
       </LayoutShell>
@@ -947,7 +972,17 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
               {currentQuestion.question_text || currentQuestion.question}
             </h2>
 
-            <div className="flex flex-col">
+            {['Descriptive', 'Text', 'Short_answer'].includes(currentQuestion.question_type) ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  rows={5}
+                  value={answers[currentQuestion.id] || ''}
+                  onChange={handleTextChange}
+                  placeholder="Type your answer here..."
+                  className="w-full p-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm text-gray-800 resize-y"
+                />
+              </div>
+             ) : (<div className="flex flex-col">
               {getQuestionOptions(currentQuestion).map((option, idx) => {
                 const isMulti = currentQuestion.question_type === 'Multiple_select';
                 const currentAns = answers[currentQuestion.id];
@@ -983,6 +1018,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
                 );
               })}
             </div>
+            )}
           </div>
         </div>
       </div>
