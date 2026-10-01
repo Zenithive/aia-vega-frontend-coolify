@@ -116,6 +116,7 @@ export default function CourseTextOrPdf({ course, category, selectedModule, filt
             {isRead ? 'Marked as Read' : 'Mark as Read'}
             <SquareCheckBig className="w-4 h-4" />
           </button>
+          {/* isLastModule: this module has a quiz still to pass — the button opens the module quiz */}
           {isLastModule ? (
             <button
               onClick={() => isRead && onGoToAssessment && onGoToAssessment()}
@@ -126,7 +127,7 @@ export default function CourseTextOrPdf({ course, category, selectedModule, filt
                   : 'bg-primary/40 text-white cursor-not-allowed'
                 }`}
             >
-              Go to Assessment
+              Take Module Quiz
               <ChevronRight className="w-4 h-4" />
             </button>
           ) : (

@@ -32,6 +32,19 @@ function extractTextContent(blocks) {
     .join('\n\n');
 }
 
+/** Module quiz with arrays always present (questions / instructions). */
+function normalizeModuleQuiz(quiz, module) {
+  if (!quiz || typeof quiz !== 'object') return null;
+  return {
+    ...quiz,
+    language: quiz.language || module?.language || '',
+    moduleId: module?.module_id || '',
+    moduleTitle: module?.title || '',
+    quiz_questions: Array.isArray(quiz.quiz_questions) ? quiz.quiz_questions : [],
+    quiz_instruction: Array.isArray(quiz.quiz_instruction) ? quiz.quiz_instruction : [],
+  };
+}
+
 function normalizeModule(module, index) {
   // Strapi returns video_file as an array for media fields — take the first item
   const videoFile = Array.isArray(module.video_file) ? module.video_file[0] : module.video_file;
@@ -45,12 +58,19 @@ function normalizeModule(module, index) {
     ? (rawPdfUrl.startsWith('http') ? rawPdfUrl : BASE_URL + (rawPdfUrl.startsWith('/') ? rawPdfUrl : `/${rawPdfUrl}`))
     : null;
 
+  const moduleKind = module.module_type === 'Offline' ? 'Offline' : 'Online';
+  const quiz = moduleKind === 'Online' ? normalizeModuleQuiz(module.quiz, module) : null;
+
   return {
     id: module.id,
     moduleId: module.module_id || '',
     moduleNumber: index + 1,
     moduleTitle: module.title || '',
-    moduleType: module.module_content_type || 'Text',
+    // Online modules have content (+ optional quiz); Offline modules are practical sessions assessed in person.
+    moduleKind,
+    quiz,
+    hasQuiz: !!quiz && quiz.quiz_questions.length > 0,
+    moduleType: moduleKind === 'Offline' ? 'Offline' : module.module_content_type || 'Text',
     moduleDuration: typeof module.module_duration_min === 'number' ? module.module_duration_min : '',
     moduleStatus: 'active',
     content: extractTextContent(module.text_content),
@@ -88,13 +108,10 @@ function normalizeCourse(course) {
   const durationMinutes = Number.isFinite(totalModuleDuration) && totalModuleDuration > 0
     ? totalModuleDuration
     : 0;
-  // Normalize quiz array to always include quiz_questions if present
-  const quiz = Array.isArray(course.quiz)
-    ? course.quiz.map(q => ({
-        ...q,
-        quiz_questions: Array.isArray(q.quiz_questions) ? q.quiz_questions : [],
-      }))
-    : [];
+  // Quizzes belong to online modules; this flat list (each tagged with its module) keeps older consumers working.
+  const quiz = rawModules
+    .filter((m) => m?.module_type !== 'Offline' && m?.quiz)
+    .map((m) => normalizeModuleQuiz(m.quiz, m));
   return {
     id: course.id,
     documentId: course.documentId,
@@ -204,8 +221,7 @@ async function fetchCourseDueDateMap() {
 
 const COURSES_LIST_PARAMS = {
   'populate[thumbnail]': true,
-  'populate[quiz][populate][quiz_questions][populate][options]': true,
-  'populate[modules]': true,
+  'populate[modules][populate][quiz][populate][quiz_questions][populate][options]': true,
   'pagination[pageSize]': 50,
   sort: 'createdAt:desc',
 };
@@ -256,13 +272,14 @@ export const fetchAllCourses = async ({ page = 1, pageSize = 9 } = {}) => {
  * Backend must populate quiz_questions.options so the quiz UI can show answer choices; see docs/BACKEND_QUIZ_OPTIONS_SPEC.md.
  */
 export const fetchCourseById = async (documentId, opts = {}) => {
+  // Quizzes live inside online modules (course → modules[] → quiz).
   const params = {
-    'populate[modules][populate]': '*',
+    'populate[modules][populate][video_file]': true,
+    'populate[modules][populate][pdf_file]': true,
+    'populate[modules][populate][quiz][populate][quiz_questions][populate][options]': true,
+    'populate[modules][populate][quiz][populate][quiz_instruction][populate][checklist]': true,
     'populate[thumbnail]': true,
     'populate[feedback][populate][feedback_template][populate][questions]': true,
-    'populate[quiz][populate][quiz_questions][populate][options]': true,
-    'populate[quiz][populate][quiz_instruction]': true,
-    'populate[quiz][populate][quiz_instruction][populate][checklist]': true,
   };
   if (opts.language) params.language = opts.language;
 
@@ -361,15 +378,28 @@ export const markModuleVideoProgress = async ({
   });
 };
 
-// Returns completed module IDs and progress status for this user+course.
+const EMPTY_PROGRESS = {
+  completedModules: [],
+  progressStatus: null,
+  feedbackSubmitted: false,
+  progressPercentage: 0,
+  selectedLanguage: null,
+  moduleStates: [],
+  nextStep: null,
+  currentModuleId: null,
+};
+
+// Returns progress for this user+course, including per-module state from the backend
+// (type, unlocked, completed, quiz attempts, offline completion proof).
 // Falls back to empty on any error so the UI stays functional.
 // Pass { fresh: true } to bypass GET deduplication cache (use after mutations like mark-as-read).
 export const fetchUserCourseProgress = async (userId, courseNumericId, opts = {}) => {
   if (!userId || !courseNumericId) {
-    return { completedModules: [], progressStatus: null, feedbackSubmitted: false, progressPercentage: 0, selectedLanguage: null };
+    return { ...EMPTY_PROGRESS };
   }
   try {
     const params = { userId, courseId: courseNumericId };
+    if (opts.language) params.language = opts.language;
     if (opts.fresh) params._t = Date.now(); // bypass dedupe cache
     const response = await api.get('/user-progress/progress', { params });
     const data = response?.data || response;
@@ -377,9 +407,18 @@ export const fetchUserCourseProgress = async (userId, courseNumericId, opts = {}
     const feedbackSubmitted = !!data?.feedback_submission;
     const progressPercentage = data?.progress_percentage ?? 0;
     const selectedLanguage = data?.selected_language ?? null;
-    return { completedModules, progressStatus: data?.progress_status ?? null, feedbackSubmitted, progressPercentage, selectedLanguage };
+    return {
+      completedModules,
+      progressStatus: data?.progress_status ?? null,
+      feedbackSubmitted,
+      progressPercentage,
+      selectedLanguage,
+      moduleStates: Array.isArray(data?.module_states) ? data.module_states : [],
+      nextStep: data?.next_step ?? null,
+      currentModuleId: data?.current_module_id ?? null,
+    };
   } catch {
-    return { completedModules: [], progressStatus: null, feedbackSubmitted: false, progressPercentage: 0, selectedLanguage: null };
+    return { ...EMPTY_PROGRESS };
   }
 };
 

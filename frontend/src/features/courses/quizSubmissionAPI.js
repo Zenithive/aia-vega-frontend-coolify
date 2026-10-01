@@ -4,8 +4,11 @@ export const submitQuiz = async (payload) => {
   return api.post('/quiz-submissions/submit', payload);
 };
 
-export const getLatestSubmission = async (userId, courseId) => {
-  return api.get('/quiz-submissions/latest', { params: { userId, courseId } });
+// Quizzes belong to online modules: pass the module id to get that module's latest attempt.
+export const getLatestSubmission = async (userId, courseId, moduleId = null) => {
+  const params = { userId, courseId };
+  if (moduleId) params.moduleId = moduleId;
+  return api.get('/quiz-submissions/latest', { params });
 };
 
 export const getQuizSubmission = async (documentId) => {
@@ -13,7 +16,7 @@ export const getQuizSubmission = async (documentId) => {
 };
 
 // Send re-attempt request when max attempts reached.
-export const sendReattemptRequest = async (userId, courseId, courseVersion) => {
+export const sendReattemptRequest = async (userId, courseId, courseVersion, moduleId = null) => {
   const uid = Number(userId);
   const cid = Number(courseId);
   if (!Number.isFinite(uid) || !Number.isFinite(cid)) {
@@ -24,10 +27,12 @@ export const sendReattemptRequest = async (userId, courseId, courseVersion) => {
     data: {
       userId: uid,
       courseId: cid,
+      moduleId: moduleId || null,
       course_version: courseVersion ? String(courseVersion) : null,
     },
     userId: uid,
     courseId: cid,
+    moduleId: moduleId || null,
     course_version: courseVersion ? String(courseVersion) : null,
   };
 
@@ -39,11 +44,12 @@ export const sendReattemptRequest = async (userId, courseId, courseVersion) => {
 };
 
 // Check if user has a pending, approved, or recently rejected reattempt request.
-export const checkPendingReattemptRequest = async (userId, courseId, courseVersion) => {
+export const checkPendingReattemptRequest = async (userId, courseId, courseVersion, moduleId = null) => {
   const params = {
     userId: Number(userId),
     courseId: Number(courseId),
   };
+  if (moduleId) params.moduleId = moduleId;
 
   if (courseVersion) {
     params.course_version = String(courseVersion);

@@ -8,6 +8,9 @@ import {
   XCircle,
   CheckCircle2,
   AlertTriangle,
+  ListChecks,
+  CircleDot,
+  PenLine,
 } from "lucide-react";
 import {
   MOCK_ASSESSMENT_QUESTIONS,
@@ -51,6 +54,8 @@ function ResultScreen({
   reattemptSent,
   reattemptLoading,
   reattemptError,
+  showFeedback = true,
+  continueLabel = null,
 }) {
   const canGoBack = passed
     ? !feedbackMandatory || feedbackSubmitted || reattemptSent
@@ -84,6 +89,7 @@ function ResultScreen({
             {resultData.pass.subMessage}
           </p>
           <div className="flex flex-col gap-3">
+            {showFeedback && (
             <button
               type="button"
               onClick={reattemptSent ? undefined : onOpenFeedback}
@@ -96,16 +102,17 @@ function ResultScreen({
             >
               Submit Feedback
             </button>
+            )}
             <button
               type="button"
               onClick={canGoBack ? onBackToCourses : undefined}
               disabled={!canGoBack}
               className={backButtonClass}
             >
-              {resultData.pass.buttonText}
+              {continueLabel || resultData.pass.buttonText}
             </button>
           </div>
-          {feedbackMandatory && !feedbackSubmitted && (
+          {showFeedback && feedbackMandatory && !feedbackSubmitted && (
             <p className="text-xs text-muted-foreground mt-2">
               Please submit feedback to continue to courses.
             </p>
@@ -217,7 +224,7 @@ function getQuestionOptions(question) {
   });
 }
 
-export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, resultData: resultDataProp, feedbackQuestions,courseVersion,feedbackCompulsory, quizDuration }) {
+export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, resultData: resultDataProp, feedbackQuestions,courseVersion,feedbackCompulsory, quizDuration, moduleId = null, isFinalModule = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -233,7 +240,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   }, []);
   const resultData = resultDataProp || MOCK_ASSESSMENT_RESULTS;
   const totalQuestions = questions.length;
-  const feedbackMandatory = feedbackCompulsory ?? getCourseFeedbackConfig(courseId).mandatory;
+  // Course feedback is only asked after the quiz that completes the course (last module quiz).
+  const feedbackMandatory = isFinalModule ? (feedbackCompulsory ?? getCourseFeedbackConfig(courseId).mandatory) : false;
   const quizDurationSeconds = (quizDuration != null && quizDuration > 0 ? quizDuration : 30) * 60;
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -407,6 +415,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     const payload = {
       userId: Number(userId),
       courseId: Number(courseNumericId),
+      moduleId,
       answers: answersArr,
       course_version: courseVersion,
       time_taken_minutes: Math.max(1, Math.round((quizDurationSeconds - currentTimeLeft) / 60)),
@@ -422,7 +431,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
 
       // Backward-compatible fallback for older backend responses.
       if (!submission || maxAttemptVal == null) {
-        const resultRes = await getLatestSubmission(Number(userId), Number(courseNumericId));
+        const resultRes = await getLatestSubmission(Number(userId), Number(courseNumericId), moduleId);
         submission = submission || resultRes?.submission;
         maxAttemptVal = maxAttemptVal ?? resultRes?.maxAttempt;
       }
@@ -446,7 +455,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         if (typeof submitRes?.has_pending_reattempt === 'boolean') {
           setReattemptSent(submitRes.has_pending_reattempt);
         } else {
-          const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId));
+          const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId), null, moduleId);
           if (reattemptStatus?.hasPending) setReattemptSent(true);
         }
       } else {
@@ -458,7 +467,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
           if (typeof submitRes?.has_pending_reattempt === 'boolean') {
             setReattemptSent(submitRes.has_pending_reattempt);
           } else {
-            const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId));
+            const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId), null, moduleId);
             if (reattemptStatus?.hasPending) setReattemptSent(true);
           }
         }
@@ -467,7 +476,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       telemetryService.trackLearningQuizSubmitted({
         courseId: Number(courseNumericId),
         routePath: typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/courses',
-        quizId: String(courseNumericId),
+        quizId: String(moduleId || courseNumericId),
         score: submission?.score ?? 0,
         maxScore: 100,
         durationSeconds: Math.max(1, Math.round(quizDurationSeconds - currentTimeLeft)),
@@ -485,7 +494,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       console.error('Quiz submission failed', e);
 
       try {
-        const latestRes = await getLatestSubmission(Number(userId), Number(courseNumericId));
+        const latestRes = await getLatestSubmission(Number(userId), Number(courseNumericId), moduleId);
         const latestSubmission = latestRes?.submission;
         const latestMaxAttempt = latestRes?.maxAttempt ?? 1;
 
@@ -507,7 +516,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
 
           if (reachedMaxWithFail) {
             setReattemptRequired(true);
-            const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId));
+            const reattemptStatus = await checkPendingReattemptRequest(Number(userId), Number(courseNumericId), null, moduleId);
             setReattemptSent(Boolean(reattemptStatus?.hasPending));
           }
         }
@@ -536,7 +545,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       setSubmitted(true);
       setShowAutoSubmitModal(false);
     }
-  }, [questions, userId, courseNumericId,courseVersion,quizDurationSeconds]); 
+  }, [questions, userId, courseNumericId, courseVersion, quizDurationSeconds, moduleId]);
 
   const handleSubmit = async () => {
     if (!hasAnswered || isSubmitting) return;
@@ -706,7 +715,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         : Number.isFinite(numericMaxAttempt) && numericMaxAttempt > 0
           ? numericMaxAttempt + 1
           : undefined;
-      await sendReattemptRequest(Number(userId), Number(courseNumericId), courseVersion);
+      await sendReattemptRequest(Number(userId), Number(courseNumericId), courseVersion, moduleId);
       writeReattemptMarker(userId, courseNumericId, {
         status: 'pending',
         forAttempt: Number.isFinite(Number(requestedForAttempt)) && Number(requestedForAttempt) > 0
@@ -884,6 +893,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         feedbackMandatory={feedbackMandatory}
         feedbackSubmitted={feedbackSubmitted}
         onOpenFeedback={openFeedbackForm}
+        showFeedback={isFinalModule}
+        continueLabel={isFinalModule ? null : 'Continue to next module'}
         attemptNumber={attemptNumber}
         maxAttempt={maxAttempt}
         reattemptRequired={reattemptRequired}
@@ -968,9 +979,39 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
           </div>
 
           <div className="">
-            <h2 className="text-base font-medium text-gray-900 mb-6">
+            <h2 className="text-base font-medium text-gray-900 mb-3">
               {currentQuestion.question_text || currentQuestion.question}
             </h2>
+
+            {/* How to answer: single vs multiple choice look alike, so say it explicitly. */}
+            {(() => {
+              const isText = ['Descriptive', 'Text', 'Short_answer'].includes(currentQuestion.question_type);
+              const isMulti = currentQuestion.question_type === 'Multiple_select';
+              const selectedCount = Array.isArray(answers[currentQuestion.id]) ? answers[currentQuestion.id].length : 0;
+              const hint = isText
+                ? { Icon: PenLine, title: "Written answer", text: "Type your answer in the box below." }
+                : isMulti
+                  ? { Icon: ListChecks, title: "Select all that apply", text: "More than one answer may be correct. Tick every correct option." }
+                  : { Icon: CircleDot, title: "Select one answer", text: "Only one option is correct." };
+              return (
+                <div
+                  className={`flex items-start gap-3 rounded-xl border px-4 py-3 mb-6 ${
+                    isMulti ? "border-amber-200 bg-amber-50" : "border-primary/20 bg-primary-light/60"
+                  }`}
+                >
+                  <hint.Icon className={`w-5 h-5 shrink-0 mt-0.5 ${isMulti ? "text-amber-600" : "text-primary"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${isMulti ? "text-amber-800" : "text-primary-dark"}`}>{hint.title}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">{hint.text}</p>
+                  </div>
+                  {isMulti && (
+                    <span className="shrink-0 self-center text-xs font-medium text-amber-800 bg-white border border-amber-200 rounded-full px-2.5 py-1">
+                      {selectedCount} selected
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
 
             {['Descriptive', 'Text', 'Short_answer'].includes(currentQuestion.question_type) ? (
               <div className="flex flex-col gap-2">
@@ -995,20 +1036,22 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
                   <label
                     key={option?.option_key ?? idx}
                     onClick={() => handleSelectOption(idx)}
-                    className="flex items-center gap-3 p-4 cursor-pointer rounded-xl border border-gray-100 hover:bg-gray-50 mb-4 shadow-sm"
+                    className={`flex items-center gap-3 p-4 cursor-pointer rounded-xl border mb-4 shadow-sm transition-colors ${
+                      isSelected ? "border-primary bg-primary-light/50" : "border-gray-100 hover:bg-gray-50"
+                    }`}
                   >
                     <span
                       className={`shrink-0 flex items-center justify-center ${
-                        isMulti 
-                          ? `w-4 h-4 rounded-sm border-2 ${isSelected ? "border-primary bg-primary" : "border-gray-300"}`
-                          : `w-3.5 h-3.5 rounded-full border-2 ${isSelected ? "border-primary" : "border-gray-300"}`
+                        isMulti
+                          ? `w-5 h-5 rounded-md border-2 ${isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"}`
+                          : `w-5 h-5 rounded-full border-2 ${isSelected ? "border-primary" : "border-gray-300 bg-white"}`
                       }`}
                     >
                       {isSelected && !isMulti && (
-                        <span className="w-2 h-2 rounded-full bg-primary" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-primary" />
                       )}
                       {isSelected && isMulti && (
-                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
                       )}

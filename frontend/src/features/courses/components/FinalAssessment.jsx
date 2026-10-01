@@ -1,5 +1,5 @@
 import React from "react";
-import { Lock, CheckCircle2 } from "lucide-react";
+import { Lock, CheckCircle2, Hourglass } from "lucide-react";
 import { useRouter } from 'next/navigation';
 
 export default function FinalAssessment({
@@ -18,19 +18,46 @@ export default function FinalAssessment({
   onOpenFeedback,
   selectedLanguage,
   hasQuizInSelectedLanguage,
+  // Quizzes belong to online modules: the module whose quiz is due now, if any.
+  allModulesCompleted = false,
+  quizModuleId = null,
+  quizModuleTitle = null,
+  pendingOfflineTitle = null,
 }) {
   const router = useRouter();
-  const langQuery = selectedLanguage ? `?lang=${encodeURIComponent(selectedLanguage)}` : "";
+  const query = new URLSearchParams();
+  if (selectedLanguage) query.set("lang", selectedLanguage);
+  if (quizModuleId) query.set("moduleId", quizModuleId);
+  const assessmentQuery = query.toString() ? `?${query.toString()}` : "";
+  const heading = allModulesCompleted
+    ? "Course Completion"
+    : quizModuleTitle
+      ? `Module Quiz — ${quizModuleTitle}`
+      : "Module Quiz";
   if (!unlocked) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex justify-center">
           <div className="w-full border border-gray-200 rounded-xl flex flex-col items-center p-4 shadow-sm bg-gray-50">
-            <Lock className="w-6 h-6 text-gray-400 mb-2" />
-            <span className="text-base text-gray-400 font-medium text-center">
-              Complete all modules to unlock the assessment
-            </span>
+            {pendingOfflineTitle ? (
+              <>
+                <Hourglass className="w-6 h-6 text-amber-600 mb-2" />
+                <span className="text-base text-gray-600 font-medium text-center">
+                  Waiting for your practical assessment in &ldquo;{pendingOfflineTitle}&rdquo;
+                </span>
+                <span className="text-xs text-gray-500 text-center mt-1">
+                  The next module unlocks once your assessor records your result.
+                </span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-6 h-6 text-gray-400 mb-2" />
+                <span className="text-base text-gray-400 font-medium text-center">
+                  Finish the current module to unlock its quiz
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -39,7 +66,7 @@ export default function FinalAssessment({
   if (isCompleted) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="w-full border border-success/30 rounded-xl flex flex-col items-center p-6 shadow-sm bg-success/5">
           <CheckCircle2 className="w-10 h-10 text-success mb-3" />
           <span className="text-base font-semibold text-gray-800 mb-1">Course Completed</span>
@@ -55,7 +82,7 @@ export default function FinalAssessment({
   if (hasRejectedReattempt) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex justify-center">
           <button
             type="button"
@@ -74,7 +101,7 @@ export default function FinalAssessment({
   if (hasPendingReattempt) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex justify-center">
           <button
             type="button"
@@ -93,7 +120,7 @@ export default function FinalAssessment({
   if (needsReattemptRequest) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex justify-center">
           <button
             type="button"
@@ -116,9 +143,9 @@ export default function FinalAssessment({
   if (needsFeedbackSubmission && onOpenFeedback) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <p className="text-sm text-gray-600 text-center mb-4">
-          You have passed the assessment. Please submit feedback to complete the course.
+          You have completed all modules. Please submit feedback to complete the course.
         </p>
         <div className="flex justify-center">
           <button
@@ -132,10 +159,21 @@ export default function FinalAssessment({
       </div>
     );
   }
+  if (allModulesCompleted) {
+    return (
+      <div className="bg-white rounded-xl shadow p-6 mt-6">
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
+        <div className="w-full border border-success/30 rounded-xl flex flex-col items-center p-6 shadow-sm bg-success/5">
+          <CheckCircle2 className="w-10 h-10 text-success mb-3" />
+          <span className="text-base font-semibold text-gray-800 mb-1">All modules completed</span>
+        </div>
+      </div>
+    );
+  }
   if (!hasQuizInSelectedLanguage) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-gray-50 p-6 text-center">
           <p className="text-sm text-gray-600">
             No assessment is available in <strong>{selectedLanguage || "this language"}</strong>.
@@ -149,13 +187,13 @@ export default function FinalAssessment({
   }
   return (
     <div className="bg-white rounded-xl shadow p-6 mt-6">
-      <div className="font-semibold text-gray-800 text-lg mb-4">Final Assessment</div>
+      <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
       <div className="flex justify-center">
         <button
           className="bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-6 rounded-lg shadow-md transition-all duration-150 text-lg"
-          onClick={() => router.push(`/courses/${category}/${courseId}/assessment${langQuery}`)}
+          onClick={() => router.push(`/courses/${category}/${courseId}/assessment${assessmentQuery}`)}
         >
-          Go to Assessment
+          Take Module Quiz
         </button>
       </div>
     </div>

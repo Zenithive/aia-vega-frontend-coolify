@@ -9,6 +9,8 @@ import {
   SquareCheckBig,
   ChevronRight,
   Lock,
+  ClipboardCheck,
+  Hourglass,
 } from "lucide-react";
 
 function ModuleCircle({ moduleNumber, moduleStatus, isSelected }) {
@@ -43,7 +45,7 @@ function ModuleCircle({ moduleNumber, moduleStatus, isSelected }) {
   );
 }
 
-export default function CourseContentList({ contents, current, onSelect, courseId, category, course, selectedLanguage, onMarkAsRead }) {
+export default function CourseContentList({ contents, current, onSelect, courseId, category, course, selectedLanguage, onMarkAsRead, moduleStates, onTakeQuiz }) {
   // Use language-filtered contents when provided so sidebar shows only selected language; else full list
   const modules =
     Array.isArray(contents)
@@ -89,6 +91,11 @@ export default function CourseContentList({ contents, current, onSelect, courseI
     router.push(`/courses/${category}/${course.documentId}/${modId}${langQuery}`);
   };
 
+  // Server-side module state (sequence, quiz result, offline assessment). Falls back to read state for older backends.
+  const stateById = new Map(
+    (Array.isArray(moduleStates) ? moduleStates : []).map((s) => [String(s.module_id), s])
+  );
+  const hasServerState = stateById.size > 0;
   const allCompleted = modules.length > 0 && modules.every(m => m.mark_as_read);
   const firstUnreadIdx = modules.findIndex(m => !m.mark_as_read);
 
@@ -102,14 +109,20 @@ export default function CourseContentList({ contents, current, onSelect, courseI
           const modId = module.moduleId || module.id;
           const isOpen = String(openModuleId) === String(modId);
           const isSelected = String(activeModuleId) === String(modId);
-          const isRead = module.mark_as_read;
+          const state = hasServerState ? stateById.get(String(module.moduleId)) : null;
+          const isOffline = module.moduleKind === 'Offline';
+          // Content read (Mark as Read) vs module completed (content + quiz passed / offline assessed)
+          const isRead = state ? state.content_completed : module.mark_as_read;
+          const isCompleted = state ? state.completed : module.mark_as_read;
           const nextModule = modules[idx + 1] || null;
-          const isLocked = !allCompleted && firstUnreadIdx >= 0 && idx > firstUnreadIdx;
-          let displayStatus = isRead ? "completed" : isLocked ? "locked" : "active";
-          // "Mark as Read" enabled for any expanded, unread, unlocked module
-          const markEnabled = isOpen && !isRead && !isLocked;
-          // "Next Lecture" is enabled only after this module is marked as read
-          const nextEnabled = isRead && !!nextModule;
+          const isLocked = state ? !state.unlocked : !allCompleted && firstUnreadIdx >= 0 && idx > firstUnreadIdx;
+          const quizPending = !!state?.has_quiz && isRead && !isCompleted;
+          let displayStatus = isCompleted ? "completed" : isLocked ? "locked" : "active";
+          // "Mark as Read" enabled for any expanded, unread, unlocked online module
+          const markEnabled = isOpen && !isRead && !isLocked && !isOffline;
+          // "Next Lecture" is enabled only after this module is completed
+          const nextEnabled = isCompleted && !!nextModule;
+          const quiz = state?.quiz;
           const handleClick = () => { if (isLocked) return; handleModuleClick(module); };
           return (
             <div
@@ -131,11 +144,19 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                     {module.moduleTitle || 'Untitled Module'}
                   </span>
                   <span className="text-xs text-gray-400">
-                    {module.moduleType || 'Unknown'}
+                    {isOffline ? 'Offline · practical assessment' : module.moduleType || 'Unknown'}
                     {typeof module.moduleDuration === 'number' && module.moduleDuration > 0
                       ? ` • ${module.moduleDuration} min`
                       : ''}
+                    {module.hasQuiz ? ' • Quiz' : ''}
                   </span>
+                  {quiz && quiz.attempts > 0 && (
+                    <span className={`text-xs ${quiz.passed ? 'text-success' : 'text-error'}`}>
+                      {quiz.passed
+                        ? `Quiz passed${quiz.last_score != null ? ` (${quiz.last_score}%)` : ''}`
+                        : `Quiz: ${quiz.last_score ?? 0}% — pass mark ${quiz.pass_mark}% • attempt ${quiz.attempts}/${quiz.max_attempt}`}
+                    </span>
+                  )}
                 </div>
                 {isOpen ? (
                   <ChevronUp className="w-5 h-5 text-gray-400 shrink-0" />
@@ -149,7 +170,17 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                 <>
                   {/* Action Buttons */}
                   <div className="flex items-center gap-4 rounded-b-2xl px-4 pb-4">
-                    {/* Mark as Read */}
+                    {isOffline ? (
+                      /* Offline: completed when the assessor uploads proof — no Mark as Read */
+                      <div
+                        className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl h-10 text-sm font-semibold border
+                          ${isCompleted ? 'bg-success/10 border-success/30 text-success' : 'bg-amber-50 border-amber-200 text-amber-700'}`}
+                      >
+                        {isCompleted ? <ClipboardCheck className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
+                        {isCompleted ? 'Assessed' : isLocked ? 'Locked' : 'Awaiting assessment'}
+                      </div>
+                    ) : (
+                    /* Mark as Read */
                     <button
                       onClick={() => markEnabled && onMarkAsRead(modId)}
                       disabled={!markEnabled}
@@ -164,8 +195,18 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                       {isRead ? 'Marked as Read' : 'Mark as Read'}
                       <SquareCheckBig className="w-4 h-4" />
                     </button>
+                    )}
 
-                    {/* Next Lecture — enabled only after marking as read */}
+                    {/* Module quiz after the content is read; otherwise Next Lecture (enabled once completed) */}
+                    {quizPending ? (
+                      <button
+                        onClick={() => onTakeQuiz && onTakeQuiz(module)}
+                        className="flex-1 flex items-center justify-center h-10 gap-2 p-3 rounded-xl text-sm font-semibold transition bg-primary text-white hover:bg-primary/90 cursor-pointer"
+                      >
+                        {quiz?.attempts > 0 ? 'Retake Quiz' : 'Take Quiz'}
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : (
                     <button
                       onClick={() => nextEnabled && handleNextLecture(nextModule)}
                       disabled={!nextEnabled}
@@ -178,6 +219,7 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                       {nextModule ? 'Next Lecture' : 'Last Module'}
                       <ChevronRight className="w-4 h-4" />
                     </button>
+                    )}
                   </div>
                 </>
               )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import MarkdownIt from "markdown-it";
 import { useRouter, useParams, usePathname, useSearchParams } from "next/navigation";
-import { FolderOpen, Clock, Maximize2, Languages, User, ListOrdered, CheckCircle2 } from "lucide-react";
+import { FolderOpen, Clock, Maximize2, Languages, User, ListOrdered, CheckCircle2, ClipboardCheck, Hourglass } from "lucide-react";
 import PageHeader from "@/components/common/PageHeader";
 import PageSection from "@/components/common/PageSection";
 import CourseStats from "./CourseStats";
@@ -22,6 +22,21 @@ import { getSocket } from '@/services/socket';
 const md = new MarkdownIt({ html: true, breaks: true });
 
 const getReattemptMarkerKey = (userId, courseId) => `quiz-reattempt:${Number(userId)}:${Number(courseId)}`;
+
+/**
+ * Module whose quiz the learner is dealing with: the current module when its content is read but its
+ * quiz is not passed yet, otherwise the last module with a quiz (for showing the latest score).
+ */
+const pickQuizModuleId = (moduleStates) => {
+  const states = Array.isArray(moduleStates) ? moduleStates : [];
+  const pending = states.find((s) => s.has_quiz && s.content_completed && !s.completed);
+  if (pending) return pending.module_id;
+  const withQuiz = states.filter((s) => s.has_quiz);
+  return withQuiz.length ? withQuiz[withQuiz.length - 1].module_id : null;
+};
+
+const allModulesDone = (moduleStates) =>
+  Array.isArray(moduleStates) && moduleStates.length > 0 && moduleStates.every((s) => s.completed);
 
 const normalizeReattemptMarker = (value) => {
   if (!value) return null;
@@ -76,7 +91,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
   const [showFullReadingView, setShowFullReadingView] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [showFeedbackSuccess, setShowFeedbackSuccess] = useState(false);
-  const [courseProgress, setCourseProgress] = useState({ progressStatus: null, quizScore: null, hasPendingReattempt: false, hasRejectedReattempt: false, hasApprovedReattempt: false, needsFeedbackSubmission: false, needsReattemptRequest: false, latestAttemptNumber: null, maxAttempt: null, progressPercentage: 0 });
+  const [courseProgress, setCourseProgress] = useState({ progressStatus: null, quizScore: null, hasPendingReattempt: false, hasRejectedReattempt: false, hasApprovedReattempt: false, needsFeedbackSubmission: false, needsReattemptRequest: false, latestAttemptNumber: null, maxAttempt: null, progressPercentage: 0, moduleStates: [] });
   const [reattemptRequestLoading, setReattemptRequestLoading] = useState(false);
   const [reattemptRequestError, setReattemptRequestError] = useState(null);
   const skipNextProgressUpdate = useRef(false);
@@ -144,9 +159,25 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     const d = Number(m.moduleDuration);
     return sum + (Number.isFinite(d) && d > 0 ? d : 0);
   }, 0);
-  const allModulesCompleted = contents.length > 0 && contents.every((m) => m.mark_as_read);
+  // Per-module state from the backend: sequence lock, quiz result, offline assessment.
+  const moduleStateById = new Map((courseProgress.moduleStates || []).map((s) => [String(s.module_id), s]));
+  const hasServerModuleState = moduleStateById.size > 0;
+  const stateOf = (m) => (m ? moduleStateById.get(String(m.moduleId)) || null : null);
+  const allModulesCompleted = hasServerModuleState
+    ? contents.length > 0 && contents.every((m) => stateOf(m)?.completed)
+    : contents.length > 0 && contents.every((m) => m.mark_as_read);
   const isLanguageSelectionLocked = allModulesCompleted;
-  const hasQuizInSelectedLanguage = filteredQuizzes.length > 0;
+  // Module quiz to take now: content read, quiz not passed yet.
+  const quizModule = contents.find((m) => {
+    const s = stateOf(m);
+    return s && s.has_quiz && s.content_completed && !s.completed;
+  }) || null;
+  // Offline module the learner is waiting on (assessor must upload proof).
+  const pendingOfflineModule = contents.find((m) => {
+    const s = stateOf(m);
+    return s && s.module_type === 'Offline' && s.unlocked && !s.completed;
+  }) || null;
+  const hasQuizInSelectedLanguage = hasServerModuleState ? !!quizModule : filteredQuizzes.length > 0;
 
 
   const moduleIdFromQuery = searchParams.get('moduleId');
@@ -159,6 +190,15 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     ? contents.findIndex((m) => String(m.moduleId || m.id) === String(currentModule.moduleId || currentModule.id))
     : -1;
   const nextModule = currentModuleIdx >= 0 ? contents[currentModuleIdx + 1] || null : null;
+  const currentModuleState = stateOf(currentModule);
+
+  const goToModuleQuiz = (module) => {
+    if (!module || !course?.documentId) return;
+    const query = new URLSearchParams();
+    if (selectedLanguage) query.set('lang', selectedLanguage);
+    query.set('moduleId', module.moduleId || module.id);
+    router.push(`/courses/${category}/${course.documentId}/assessment?${query.toString()}`);
+  };
 
   useEffect(() => {
     const courseId = course?.id;
@@ -268,10 +308,14 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     const userId = getCurrentUserId();
     const courseIdForApi = course?.id ?? course?.documentId;
     if (!courseIdForApi || !userId) return;
-    Promise.all([
-      fetchUserCourseProgress(userId, courseIdForApi, { fresh: true }),
-      checkPendingReattemptRequest(userId, courseIdForApi),
-    ]).then(([{ completedModules, progressStatus, feedbackSubmitted, progressPercentage, selectedLanguage: savedLang }, reattemptStatus]) => {
+    fetchUserCourseProgress(userId, courseIdForApi, { fresh: true })
+      .then(async (progressRes) => {
+        // Quizzes are per module: reattempt / latest-attempt lookups use the module the learner is on.
+        const quizModuleId = pickQuizModuleId(progressRes.moduleStates);
+        const reattemptStatus = await checkPendingReattemptRequest(userId, courseIdForApi, null, quizModuleId).catch(() => null);
+        return [progressRes, reattemptStatus, quizModuleId];
+      })
+      .then(([{ completedModules, progressStatus, feedbackSubmitted, progressPercentage, selectedLanguage: savedLang, moduleStates }, reattemptStatus, quizModuleId]) => {
       const hasPending = reattemptStatus?.hasPending ?? false;
       const hasRejected = reattemptStatus?.hasRejected ?? false;
       const hasApprovedFromApi = reattemptStatus?.hasApproved ?? false;
@@ -287,13 +331,17 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
       }
       if (skipNextProgressUpdate.current) {
         skipNextProgressUpdate.current = false;
-        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
+        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
       } else {
         dispatch(initializeModuleReadState(completedModules));
-        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
+        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
       }
-     
-      getLatestSubmission(userId, courseIdForApi).then((res) => {
+      // Feedback comes after every module is completed (not after a single quiz).
+      const needsFeedback = allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== "Completed";
+      setCourseProgress((p) => ({ ...p, needsFeedbackSubmission: needsFeedback }));
+
+      if (!quizModuleId) return;
+      getLatestSubmission(userId, courseIdForApi, quizModuleId).then((res) => {
         const submission = res?.submission;
         const latestAttemptNumber = submission?.attempt_number ?? null;
         const latestMaxAttempt = res?.maxAttempt ?? 1;
@@ -319,7 +367,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         );
         if (submission) {
           const score = submission.score;
-          const passed = submission.passed === true;
           setCourseProgress((p) => ({
             ...p,
             quizScore: score,
@@ -328,7 +375,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             latestAttemptNumber,
             maxAttempt: latestMaxAttempt,
             needsReattemptRequest: failedAtMaxAttempts && !hasPending && !hasRejected && !hasApproved,
-            needsFeedbackSubmission: passed && !feedbackSubmitted && progressStatus !== "Completed",
           }));
         } else {
           setCourseProgress((p) => ({
@@ -338,7 +384,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             latestAttemptNumber: null,
             maxAttempt: null,
             needsReattemptRequest: false,
-            needsFeedbackSubmission: false,
           }));
         }
       });
@@ -358,10 +403,13 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         const courseIdForApi = course?.id ?? course?.documentId;
         if (!userId || !courseIdForApi) return;
 
-        Promise.all([
-          fetchUserCourseProgress(userId, courseIdForApi, { fresh: true }),
-          checkPendingReattemptRequest(userId, courseIdForApi),
-        ]).then(([{ completedModules, progressStatus, feedbackSubmitted, progressPercentage }, reattemptStatus]) => {
+        fetchUserCourseProgress(userId, courseIdForApi, { fresh: true })
+          .then(async (progressRes) => {
+            const quizModuleId = pickQuizModuleId(progressRes.moduleStates);
+            const reattemptStatus = await checkPendingReattemptRequest(userId, courseIdForApi, null, quizModuleId).catch(() => null);
+            return [progressRes, reattemptStatus, quizModuleId];
+          })
+          .then(([{ completedModules, progressStatus, feedbackSubmitted, progressPercentage, moduleStates }, reattemptStatus, quizModuleId]) => {
           dispatch(initializeModuleReadState(completedModules));
           const hasPendingFromApi = reattemptStatus?.hasPending ?? false;
           const hasRejectedFromApi = reattemptStatus?.hasRejected ?? false;
@@ -375,12 +423,15 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             ...p,
             progressStatus,
             progressPercentage,
+            moduleStates,
+            needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== 'Completed',
             hasPendingReattempt: hasPendingResolved,
             hasRejectedReattempt: hasRejectedResolved,
             hasApprovedReattempt: hasApprovedResolved,
           }));
 
-          getLatestSubmission(userId, courseIdForApi).then((res) => {
+          if (!quizModuleId) return;
+          getLatestSubmission(userId, courseIdForApi, quizModuleId).then((res) => {
             const submission = res?.submission;
             const latestAttemptNumber = submission?.attempt_number ?? null;
             const latestMaxAttempt = res?.maxAttempt ?? 1;
@@ -423,7 +474,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                 latestAttemptNumber,
                 maxAttempt: latestMaxAttempt,
                 needsReattemptRequest: failedAtMaxAttempts && !hasPendingResolved && !hasRejectedResolved && !hasApprovedEffective,
-                needsFeedbackSubmission: submission.passed === true && !feedbackSubmitted && progressStatus !== 'Completed',
               }));
             } else {
               setCourseProgress((prev) => ({
@@ -433,7 +483,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                 latestAttemptNumber: null,
                 maxAttempt: null,
                 needsReattemptRequest: false,
-                needsFeedbackSubmission: false,
               }));
             }
           });
@@ -462,7 +511,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           ? numericMaxAttempt + 1
           : undefined;
 
-      await sendReattemptRequest(Number(userId), Number(courseIdForApi), course?.courseVersion);
+      await sendReattemptRequest(Number(userId), Number(courseIdForApi), course?.courseVersion, pickQuizModuleId(courseProgress.moduleStates));
       writeReattemptMarker(userId, courseIdForApi, {
         status: 'pending',
         forAttempt: Number.isFinite(Number(requestedForAttempt)) && Number(requestedForAttempt) > 0
@@ -577,16 +626,22 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
 
     try {
       if (courseIdForApi) {
-        const { completedModules, progressPercentage } = await fetchUserCourseProgress(userId, courseIdForApi, { fresh: true });
+        const { completedModules, progressPercentage, progressStatus, moduleStates, feedbackSubmitted } = await fetchUserCourseProgress(userId, courseIdForApi, { fresh: true });
         skipNextProgressUpdate.current = true;
         dispatch(initializeModuleReadState(completedModules));
-        setCourseProgress((p) => ({ ...p, progressPercentage }));
+        setCourseProgress((p) => ({
+          ...p,
+          progressPercentage,
+          progressStatus,
+          moduleStates,
+          needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== 'Completed',
+        }));
       }
     } catch (err) {
       if (courseIdForApi) {
-        fetchUserCourseProgress(userId, courseIdForApi, { fresh: true }).then(({ completedModules, progressPercentage }) => {
+        fetchUserCourseProgress(userId, courseIdForApi, { fresh: true }).then(({ completedModules, progressPercentage, moduleStates }) => {
           dispatch(initializeModuleReadState(completedModules));
-          setCourseProgress((p) => ({ ...p, progressPercentage }));
+          setCourseProgress((p) => ({ ...p, progressPercentage, moduleStates }));
         });
       }
     }
@@ -760,11 +815,12 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
               setShowFeedbackSuccess(true);
               // Refetch progress - backend finalizeCourse sets Completed
               if (userId && courseNumericId) {
-                fetchUserCourseProgress(userId, courseNumericId, { fresh: true }).then(({ completedModules, progressStatus, progressPercentage }) => {
+                fetchUserCourseProgress(userId, courseNumericId, { fresh: true }).then(({ completedModules, progressStatus, progressPercentage, moduleStates }) => {
                   dispatch(initializeModuleReadState(completedModules));
-                  setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, needsFeedbackSubmission: false }));
-                  if (progressStatus === "Completed") {
-                    getLatestSubmission(userId, courseNumericId).then((res) => {
+                  setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, needsFeedbackSubmission: false }));
+                  const quizModuleId = pickQuizModuleId(moduleStates);
+                  if (progressStatus === "Completed" && quizModuleId) {
+                    getLatestSubmission(userId, courseNumericId, quizModuleId).then((res) => {
                       setCourseProgress((p) => ({ ...p, quizScore: res?.submission?.score }));
                     });
                   }
@@ -783,7 +839,8 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
   }
 
   if (showFullReadingView) {
-    const isLastModule = currentModuleIdx >= 0 && currentModuleIdx === contents.length - 1;
+    // The full view's quiz button is shown while this module's quiz is still to be passed.
+    const isLastModule = !!currentModuleState?.has_quiz && !currentModuleState?.completed;
     return (
       <CourseTextOrPdf
         course={course}
@@ -801,8 +858,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         isLastModule={isLastModule}
         onGoToAssessment={() => {
           setShowFullReadingView(false);
-          const langQuery = selectedLanguage ? `?lang=${encodeURIComponent(selectedLanguage)}` : '';
-          router.push(`/courses/${category}/${course.documentId}/assessment${langQuery}`);
+          goToModuleQuiz(currentModule);
         }}
       />
     );
@@ -885,8 +941,41 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                 </h2>
               )}
 
-              {/* Show content based on moduleType */}
-              {currentModule?.moduleType === 'Video' ? (
+              {/* Show content based on module kind / moduleType */}
+              {currentModule?.moduleKind === 'Offline' ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-8 mt-4 space-y-4">
+                  <div className="flex items-center gap-3">
+                    {currentModuleState?.completed
+                      ? <ClipboardCheck className="w-8 h-8 text-success" />
+                      : <Hourglass className="w-8 h-8 text-amber-600" />}
+                    <div>
+                      <p className="font-semibold text-gray-900">Offline module — practical assessment</p>
+                      <p className="text-sm text-gray-600">
+                        This module takes place in person at your workplace. There is no online quiz.
+                      </p>
+                    </div>
+                  </div>
+                  {currentModuleState?.completed ? (
+                    <div className="rounded-lg bg-success/10 border border-success/30 p-4 text-sm text-gray-700">
+                      Completed{currentModuleState?.offline_completion?.completed_at
+                        ? ` on ${new Date(currentModuleState.offline_completion.completed_at).toLocaleDateString()}`
+                        : ''}
+                      {currentModuleState?.offline_completion?.assessed_by
+                        ? ` — assessed by ${currentModuleState.offline_completion.assessed_by}`
+                        : ''}. You can continue with the next module.
+                    </div>
+                  ) : currentModuleState && !currentModuleState.unlocked ? (
+                    <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-sm text-gray-600">
+                      Complete the previous modules first.
+                    </div>
+                  ) : (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-gray-700">
+                      Attend the practical session with your assessor. Once they record your result, this module is marked
+                      complete and the next module unlocks.
+                    </div>
+                  )}
+                </div>
+              ) : currentModule?.moduleType === 'Video' ? (
                 <>
                   <div className="relative w-full rounded-xl mt-2 bg-black" style={{ aspectRatio: '16/9' }}>
                     <video
@@ -1018,9 +1107,15 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                 course={course}
                 selectedLanguage={selectedLanguage}
                 onMarkAsRead={handleMarkAsRead}
+                moduleStates={courseProgress.moduleStates}
+                onTakeQuiz={goToModuleQuiz}
               />
               <FinalAssessment
-                unlocked={allModulesCompleted}
+                unlocked={allModulesCompleted || !!quizModule}
+                allModulesCompleted={allModulesCompleted}
+                quizModuleId={quizModule ? quizModule.moduleId || quizModule.id : null}
+                quizModuleTitle={quizModule?.moduleTitle || null}
+                pendingOfflineTitle={pendingOfflineModule?.moduleTitle || null}
                 category={category}
                 courseId={course.documentId}
                 isCompleted={courseProgress.progressStatus === "Completed"}

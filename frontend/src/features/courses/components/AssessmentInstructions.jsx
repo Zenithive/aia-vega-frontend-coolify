@@ -118,8 +118,8 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
     (async () => {
       try {
         const [latestRes, reattemptStatus] = await Promise.all([
-          getLatestSubmission(Number(userId), Number(courseNumericId)),
-          checkPendingReattemptRequest(Number(userId), Number(courseNumericId)),
+          getLatestSubmission(Number(userId), Number(courseNumericId), props.moduleId || null),
+          checkPendingReattemptRequest(Number(userId), Number(courseNumericId), null, props.moduleId || null),
         ]);
         if (cancelled) return;
         const maxAttempt = latestRes?.maxAttempt ?? 1;
@@ -141,7 +141,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
       }
     })();
     return () => { cancelled = true; };
-  }, [props.userId, props.courseNumericId]);
+  }, [props.userId, props.courseNumericId, props.moduleId]);
 
   // Prepare quiz questions and result data for AssessmentQuiz
   // Support both quiz_questions (from API) and questions (legacy/mock)
@@ -166,6 +166,8 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
   const feedbackQuestions = feedbackForLang?.questions || [];
   // compulsory is a yes-no-toggle custom field: true = mandatory, false/null = optional
   const feedbackCompulsory = feedbackForLang?.compulsory === true;
+  // Course feedback belongs after the quiz that completes the course, not after every module quiz.
+  const isFinalModule = props.isFinalModule !== false;
 
   if (quizStarted) {
     return (
@@ -178,9 +180,11 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
         userId={props.userId ?? getCurrentUserId()}
         quizQuestions={quizQuestions}
         resultData={resultData}
-        feedbackQuestions={feedbackQuestions}
-        feedbackCompulsory={feedbackCompulsory}
+        feedbackQuestions={isFinalModule ? feedbackQuestions : []}
+        feedbackCompulsory={isFinalModule ? feedbackCompulsory : false}
         quizDuration={props.quiz?.completion_time}
+        moduleId={props.moduleId || null}
+        isFinalModule={isFinalModule}
       />
     );
   }
@@ -196,7 +200,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
     <div className="min-h-screen bg-[#fafafa]" style={courseBgStyle}>
       <div className="w-full">
         <PageHeader
-          title="Assessment Instructions"
+          title={props.moduleTitle ? `Module Quiz — ${props.moduleTitle}` : "Assessment Instructions"}
           breadcrumbs={[
             { label: "Courses", href: "/courses" },
             {
