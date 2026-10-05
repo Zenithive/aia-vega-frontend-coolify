@@ -48,9 +48,17 @@ export default function MyCourses({ courses = [] }) {
                     <h3 className="text-h3 font-semibold text-gray-900 truncate leading-normal">
                       {course.title}
                     </h3>
-                    <p className="text-small text-muted-foreground mb-2">
-                      {Math.min(course.completedLessons, course.totalLessons)} of {course.totalLessons} modules
-                    </p>
+                    <div className="flex items-center gap-2 text-small text-muted-foreground mb-2">
+                      <span>
+                        {Math.min(course.completedLessons, course.totalLessons)} of {course.totalLessons} modules
+                      </span>
+                      {course.courseVersion && (
+                        <>
+                          <span>•</span>
+                          <span>Version {course.courseVersion}</span>
+                        </>
+                      )}
+                    </div>
 
                     {/* Progress bar */}
                     <div className="flex items-center gap-2">

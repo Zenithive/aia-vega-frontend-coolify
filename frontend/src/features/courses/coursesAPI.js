@@ -173,7 +173,6 @@ async function fetchCourseDueDateMap() {
         'populate[departments]': true,
         'populate[individual_user]': true,
         'populate[work_locations]': true,
-        'filters[active][$eq]': 'published',
         'pagination[pageSize]': 1000,
         'pagination[page]': 1,
       },

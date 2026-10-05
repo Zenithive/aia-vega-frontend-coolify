@@ -325,7 +325,7 @@ function getCurrentUserInfo() {
 }
 
 /**
- * Fetch all active course-assignments and build a map of courseId → earliest due_date.
+ * Fetch all published course-assignments and build a map of courseId → earliest due_date.
  * Filters only assignments that apply to the current user (by company, department,
  * work_location, or individual user id).
  */
@@ -343,7 +343,6 @@ async function fetchCourseDueDateMap() {
         'populate[departments]': true,
         'populate[individual_user]': true,
         'populate[work_locations]': true,
-        'filters[active][$eq]': 'published',
         'pagination[pageSize]': 1000,
         'pagination[page]': 1,
       },
@@ -418,10 +417,6 @@ export const fetchMyCourses = async () => {
     : [];
   const courses = raw.filter(c => c.active !== 'unpublished').slice(0, 4);
 
-  // Build a map of courseId -> progress payload from the batch progress response.
-  // Supports both shapes returned by backend:
-  // 1) array of entries [{ course, completed_modules, progress_status, progress_percentage }]
-  // 2) object map { [courseId]: { ...progressFields } }
   const progressMap = {};
   const setProgressEntry = (courseId, entry) => {
     if (courseId == null || !entry || typeof entry !== 'object') return;
@@ -431,6 +426,7 @@ export const fetchMyCourses = async () => {
         : [],
       progressStatus: entry.progress_status ?? null,
       progressPercentage: Number(entry.progress_percentage ?? 0) || 0,
+      dueDate: entry.due_date ?? null,
     };
   };
 
@@ -489,7 +485,8 @@ export const fetchMyCourses = async () => {
       completedLessons = completedLessonsById;
     }
 
-    const assignmentDueDate = dueDateMap[String(courseId)] ?? dueDateMap[courseId];
+    // The learner's own due date (user-progress) wins; the assignment map is only a fallback.
+    const assignmentDueDate = progressEntry?.dueDate || dueDateMap[String(courseId)] || dueDateMap[courseId];
 
     return {
       id: c.id,
@@ -497,6 +494,7 @@ export const fetchMyCourses = async () => {
       title: c.title || '',
       category: c.course_category || 'courses',
       thumbnail: withImageUrl(c.thumbnail),
+      courseVersion: c.course_version,
       progress,
       completedLessons,
       totalLessons,

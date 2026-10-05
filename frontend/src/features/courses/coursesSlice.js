@@ -34,6 +34,8 @@ export const loadAllCourses = createAsyncThunk(
             certificationGenerated: progressByCourse[c.id]?.certificate_issued ?? c.certificationGenerated,
             progressStatus: progressByCourse[c.id]?.progress_status ?? null,
             feedbackSubmitted: progressByCourse[c.id]?.feedback_submitted ?? false,
+            // The learner's own due date (user-progress) wins over the assignment-level one.
+            deadline: progressByCourse[c.id]?.due_date || c.deadline,
           }))
           .map(withDeadlineLock);
       } else {
