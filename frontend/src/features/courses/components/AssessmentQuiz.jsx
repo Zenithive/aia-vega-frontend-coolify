@@ -11,6 +11,7 @@ import {
   ListChecks,
   CircleDot,
   PenLine,
+  Hourglass,
 } from "lucide-react";
 import {
   MOCK_ASSESSMENT_QUESTIONS,
@@ -56,6 +57,7 @@ function ResultScreen({
   reattemptError,
   showFeedback = true,
   continueLabel = null,
+  reviewPending = false,
 }) {
   const canGoBack = passed
     ? !feedbackMandatory || feedbackSubmitted || reattemptSent
@@ -65,6 +67,35 @@ function ResultScreen({
   const backButtonClass = canGoBack
     ? "w-full py-3 rounded-xl bg-success text-white hover:bg-success/90 transition cursor-pointer"
     : "w-full py-3 rounded-xl bg-gray-300 text-gray-500 cursor-not-allowed";
+
+  // Descriptive answers go to an admin first: no score / pass / fail until the review is published.
+  if (reviewPending) {
+    return (
+      <div className="fixed inset-0 z-50 bg-gray-100 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-lg w-full max-w-147.75 p-8 text-center">
+          <div className="flex justify-center mb-4">
+            <Hourglass className="w-12 h-12 text-amber-600" />
+          </div>
+          <h2 className="text-2xl font-semibold text-foreground mb-4">Quiz submitted — pending review</h2>
+          <p className="font-semibold text-foreground/60 leading-relaxed mb-4">
+            Your descriptive answers will be reviewed by an admin. Your final score will be available after the review.
+          </p>
+          {normalizedAttemptNumber !== undefined && normalizedMaxAttempt !== undefined && (
+            <p className="text-sm font-semibold text-foreground/60 mb-6">
+              Current Attempt {normalizedAttemptNumber} / Max Attempt {normalizedMaxAttempt}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onBackToCourses}
+            className="w-full py-3 rounded-xl bg-primary text-white hover:bg-primary/90 transition cursor-pointer"
+          >
+            Back to course
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (passed) {
     const passHeading = score != null ? `Passed ${score}%` : "Passed";
@@ -260,6 +291,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   const [reattemptSent, setReattemptSent] = useState(false);
   const [reattemptLoading, setReattemptLoading] = useState(false);
   const [reattemptError, setReattemptError] = useState(null);
+  const [reviewPending, setReviewPending] = useState(false);
   const [showReattemptSuccessModal, setShowReattemptSuccessModal] = useState(false);
   const [violationWarning, setViolationWarning] = useState(false);
   const [timeLimitExceeded, setTimeLimitExceeded] = useState(false);
@@ -442,12 +474,16 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       const attemptNum = submission?.attempt_number;
       const currentEqualsMax = attemptNum != null && maxAttemptVal != null && attemptNum >= maxAttemptVal;
       const userPassed = submission?.passed === true;
+      const underReview = submitRes?.review_pending === true || submission?.review_status === 'Pending_review';
 
       setScore(submission?.score ?? 0);
       setIsPassed(userPassed);
+      setReviewPending(underReview);
       if (attemptNum != null) setAttemptNumber(attemptNum);
 
-      if (!userPassed && (submitRes?.reattempt_required || currentEqualsMax)) {
+      if (underReview) {
+        // Result is published after the admin review; nothing else to decide now.
+      } else if (!userPassed && (submitRes?.reattempt_required || currentEqualsMax)) {
         setReattemptRequired(true);
         setIsPassed(false);
         setScore(submission?.score ?? 0);
@@ -485,6 +521,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
           user_id: Number(userId),
           passed: userPassed,
           score: submission?.score ?? 0,
+          review_pending: underReview,
           attempt_number: attemptNum ?? null,
           max_attempt: maxAttemptVal ?? null,
           auto_submitted: Boolean(violationWarning),
@@ -503,12 +540,15 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         if (latestSubmission) {
           const latestAttempt = latestSubmission?.attempt_number;
           const latestPassed = latestSubmission?.passed === true;
+          const latestUnderReview = latestSubmission?.review_status === 'Pending_review';
 
           setScore(latestSubmission?.score ?? 0);
           setIsPassed(latestPassed);
+          setReviewPending(latestUnderReview);
           if (latestAttempt != null) setAttemptNumber(latestAttempt);
 
           const reachedMaxWithFail =
+            !latestUnderReview &&
             !latestPassed &&
             latestAttempt != null &&
             latestMaxAttempt != null &&
@@ -901,6 +941,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         reattemptSent={reattemptSent}
         reattemptLoading={reattemptLoading}
         reattemptError={reattemptError}
+        reviewPending={reviewPending}
       />
     );
   }

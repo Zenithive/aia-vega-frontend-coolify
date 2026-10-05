@@ -150,7 +150,11 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                       : ''}
                     {module.hasQuiz ? ' • Quiz' : ''}
                   </span>
-                  {quiz && quiz.attempts > 0 && (
+                  {quiz && quiz.attempts > 0 && !quiz.passed && quiz.pending_review ? (
+                    <span className="text-xs text-amber-700">
+                      Quiz submitted — result under review • attempt {quiz.attempts}/{quiz.max_attempt}
+                    </span>
+                  ) : quiz && quiz.attempts > 0 && (
                     <span className={`text-xs ${quiz.passed ? 'text-success' : 'text-error'}`}>
                       {quiz.passed
                         ? `Quiz passed${quiz.last_score != null ? ` (${quiz.last_score}%)` : ''}`
@@ -198,7 +202,12 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                     )}
 
                     {/* Module quiz after the content is read; otherwise Next Lecture (enabled once completed) */}
-                    {quizPending ? (
+                    {quizPending && quiz?.pending_review ? (
+                      <div className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl h-10 text-sm font-semibold border bg-amber-50 border-amber-200 text-amber-700">
+                        <Hourglass className="w-4 h-4" />
+                        Result under review
+                      </div>
+                    ) : quizPending ? (
                       <button
                         onClick={() => onTakeQuiz && onTakeQuiz(module)}
                         className="flex-1 flex items-center justify-center h-10 gap-2 p-3 rounded-xl text-sm font-semibold transition bg-primary text-white hover:bg-primary/90 cursor-pointer"

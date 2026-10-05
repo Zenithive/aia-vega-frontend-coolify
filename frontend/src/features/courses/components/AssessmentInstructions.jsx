@@ -44,6 +44,7 @@ export default function AssessmentInstructions(props) {
   const [quizStarted, setQuizStarted] = useState(false);
   const [blockStartPendingReattempt, setBlockStartPendingReattempt] = useState(false);
   const [blockRejectedReattempt, setBlockRejectedReattempt] = useState(false);
+  const [blockReviewPending, setBlockReviewPending] = useState(false);
   const [canRequestAgainAt, setCanRequestAgainAt] = useState(null);
   const [blockCheckLoading, setBlockCheckLoading] = useState(true);
   const [startingAssessment, setStartingAssessment] = useState(false);
@@ -129,11 +130,13 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
         const hasRejected = reattemptStatus?.hasRejected ?? false;
         setBlockStartPendingReattempt(atMaxAttempts && hasPending);
         setBlockRejectedReattempt(hasRejected);
+        setBlockReviewPending(latestRes?.submission?.review_status === 'Pending_review');
         setCanRequestAgainAt(reattemptStatus?.canRequestAgainAt ?? null);
       } catch {
         if (!cancelled) {
           setBlockStartPendingReattempt(false);
           setBlockRejectedReattempt(false);
+          setBlockReviewPending(false);
           setCanRequestAgainAt(null);
         }
       } finally {
@@ -334,7 +337,29 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
 
           {/* Start Assessment Button / Pending or Rejected Reattempt Block */}
           <div className="flex flex-col items-center gap-4">
-            {blockRejectedReattempt ? (
+            {blockReviewPending ? (
+              <>
+                <div className="rounded-xl p-5 mb-2 flex items-start gap-3 border border-warning bg-orange-light max-w-xl w-full">
+                  <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-warning-light-bg">
+                    <Info className="w-4 h-4 text-warning" />
+                  </div>
+                  <div>
+                    <span className="font-semibold text-lg text-warning">
+                      Your answers are being reviewed
+                    </span>
+                    <p className="text-gray mt-1">
+                      Your last attempt has descriptive answers that are being checked by an admin. You will be notified when your final score is published.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push("/courses")}
+                  className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer"
+                >
+                  Back to Courses
+                </button>
+              </>
+            ) : blockRejectedReattempt ? (
               <>
                 <div className="rounded-xl p-5 mb-2 flex items-start gap-3 border border-red-200 bg-red-50 max-w-xl w-full">
                   <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-red-100">

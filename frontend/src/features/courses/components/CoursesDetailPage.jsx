@@ -178,6 +178,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     return s && s.module_type === 'Offline' && s.unlocked && !s.completed;
   }) || null;
   const hasQuizInSelectedLanguage = hasServerModuleState ? !!quizModule : filteredQuizzes.length > 0;
+  const quizPendingReview = !!stateOf(quizModule)?.quiz?.pending_review;
 
 
   const moduleIdFromQuery = searchParams.get('moduleId');
@@ -359,14 +360,16 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           Number(latestAttemptNumber) < markerForAttempt &&
           (marker?.status === 'approved' || (marker?.status === 'pending' && !hasPending && !hasRejected));
         const hasApproved = hasApprovedFromApi || inferredApprovedFromMarker;
+        const underReview = submission?.review_status === 'Pending_review';
         const failedAtMaxAttempts = Boolean(
           submission &&
+          !underReview &&
           submission.passed !== true &&
           latestAttemptNumber != null &&
           latestAttemptNumber >= latestMaxAttempt
         );
         if (submission) {
-          const score = submission.score;
+          const score = underReview ? null : submission.score;
           setCourseProgress((p) => ({
             ...p,
             quizScore: score,
@@ -397,7 +400,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
 
     const handleNotification = (payload) => {
       const type = payload?.type || '';
-      if (type === 'quiz_reattempt_approved' || type === 'quiz_reattempt_rejected') {
+      if (type === 'quiz_reattempt_approved' || type === 'quiz_reattempt_rejected' || type === 'quiz_reviewed') {
         const isApprovedEvent = type === 'quiz_reattempt_approved';
         const userId = getCurrentUserId();
         const courseIdForApi = course?.id ?? course?.documentId;
@@ -459,8 +462,10 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
               Number(latestAttemptNumber) < Number(resolvedForAttempt) &&
               (isApprovedEvent || (marker?.status === 'pending' && !hasPendingResolved && !hasRejectedResolved));
             const hasApprovedEffective = Boolean(hasApprovedResolved || inferredApprovedFromMarker);
+            const underReview = submission?.review_status === 'Pending_review';
             const failedAtMaxAttempts = Boolean(
               submission &&
+              !underReview &&
               submission.passed !== true &&
               latestAttemptNumber != null &&
               latestAttemptNumber >= latestMaxAttempt
@@ -468,7 +473,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             if (submission) {
               setCourseProgress((prev) => ({
                 ...prev,
-                quizScore: submission.score,
+                quizScore: underReview ? null : submission.score,
                 quizAlreadyTaken: true,
                 hasApprovedReattempt: hasApprovedEffective,
                 latestAttemptNumber,
@@ -821,7 +826,10 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                   const quizModuleId = pickQuizModuleId(moduleStates);
                   if (progressStatus === "Completed" && quizModuleId) {
                     getLatestSubmission(userId, courseNumericId, quizModuleId).then((res) => {
-                      setCourseProgress((p) => ({ ...p, quizScore: res?.submission?.score }));
+                      setCourseProgress((p) => ({
+                      ...p,
+                      quizScore: res?.submission?.review_status === 'Pending_review' ? null : res?.submission?.score,
+                    }));
                     });
                   }
                 });
@@ -1131,6 +1139,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                 onOpenFeedback={() => setShowFeedbackForm(true)}
                 selectedLanguage={selectedLanguage}
                 hasQuizInSelectedLanguage={hasQuizInSelectedLanguage}
+                quizPendingReview={quizPendingReview}
               />
             </div>
           </div>

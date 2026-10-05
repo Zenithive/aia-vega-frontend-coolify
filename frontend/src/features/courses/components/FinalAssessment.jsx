@@ -23,6 +23,8 @@ export default function FinalAssessment({
   quizModuleId = null,
   quizModuleTitle = null,
   pendingOfflineTitle = null,
+  // The module quiz attempt has descriptive answers waiting for admin review.
+  quizPendingReview = false,
 }) {
   const router = useRouter();
   const query = new URLSearchParams();
@@ -75,6 +77,20 @@ export default function FinalAssessment({
               Your Score: {quizScore}%
             </span>
           )} */}
+        </div>
+      </div>
+    );
+  }
+  if (quizPendingReview) {
+    return (
+      <div className="bg-white rounded-xl shadow p-6 mt-6">
+        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
+        <div className="w-full border border-amber-200 rounded-xl flex flex-col items-center p-4 shadow-sm bg-amber-50">
+          <Hourglass className="w-6 h-6 text-amber-600 mb-2" />
+          <span className="text-base text-gray-700 font-medium text-center">Quiz submitted — result under review</span>
+          <span className="text-xs text-gray-500 text-center mt-1">
+            Your descriptive answers are being checked by an admin. Your final score will appear here once it is published.
+          </span>
         </div>
       </div>
     );
