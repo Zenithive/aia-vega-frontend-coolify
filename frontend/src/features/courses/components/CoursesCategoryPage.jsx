@@ -8,7 +8,7 @@ import SurfaceCard from '@/components/common/SurfaceCard';
 import Loader from '@/components/common/Loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, MoreVertical, ChevronRight, Clock, BookOpen, GitBranch,Layers, Award } from 'lucide-react';
+import { PlayCircle, MoreVertical, ChevronRight, Clock, BookOpen, GitBranch,Layers, Award, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadAllCourses } from '@/features/courses/coursesSlice';
@@ -30,6 +30,17 @@ const COURSE_CARD_TITLE_CLASS = 'font-medium text-gray-900 text-lg leading-7 h-7
 const COURSE_CARD_ACTION_CLASS = 'mt-auto pt-2 min-h-[52px]';
 const COURSE_CARD_ACTION_BUTTON_BASE = 'rounded-md font-normal px-6 py-2 flex items-center gap-2 w-full justify-center';
 const PAGE_SIZE = 24;
+
+/**
+ * "2026-03-15" → "Mar 15, 2026". Parsed as a local calendar day: new Date("2026-03-15") is UTC
+ * midnight, which shows the previous day in time zones behind UTC.
+ */
+function formatDueDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  const date = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 export default function CoursesCategoryPage({ category }) {
   const router = useRouter();
@@ -375,6 +386,21 @@ export default function CoursesCategoryPage({ category }) {
                         title={course.title}
                       >
                         {course.title}
+                      </div>
+                      {/* Learner's own due date (user progress, else the assignment's). The row is always
+                          rendered so cards keep the same height. */}
+                      <div className="flex items-center gap-1 text-small h-5">
+                        {course.deadline && !isCompleted && formatDueDate(course.deadline) ? (
+                          <span
+                            className={`flex items-center gap-1 ${
+                              isLockedByDeadline ? 'text-red-600 font-medium' : 'text-muted-foreground'
+                            }`}
+                          >
+                            <CalendarDays className="w-4 h-4" />
+                            {isLockedByDeadline ? 'Overdue · was due ' : 'Due '}
+                            {formatDueDate(course.deadline)}
+                          </span>
+                        ) : null}
                       </div>
                       <div className={COURSE_CARD_ACTION_CLASS}>
                         {isInProgress && (
