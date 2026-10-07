@@ -6,7 +6,6 @@ import PageHeader from "@/components/common/PageHeader";
 import PageSection from "@/components/common/PageSection";
 import CourseStats from "./CourseStats";
 import CourseContentList from "./CourseContentList";
-import FinalAssessment from "./FinalAssessment";
 import CourseTextOrPdf from "./CourseTextOrPdf";
 import FeedbackForm from "./FeedbackForm";
 import LayoutShell from "@/components/layout/LayoutShell";
@@ -173,12 +172,6 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     return s && s.has_quiz && s.content_completed && !s.completed;
   }) || null;
   // Offline module the learner is waiting on (assessor must upload proof).
-  const pendingOfflineModule = contents.find((m) => {
-    const s = stateOf(m);
-    return s && s.module_type === 'Offline' && s.unlocked && !s.completed;
-  }) || null;
-  const hasQuizInSelectedLanguage = hasServerModuleState ? !!quizModule : filteredQuizzes.length > 0;
-  const quizPendingReview = !!stateOf(quizModule)?.quiz?.pending_review;
 
 
   const moduleIdFromQuery = searchParams.get('moduleId');
@@ -192,6 +185,15 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     : -1;
   const nextModule = currentModuleIdx >= 0 ? contents[currentModuleIdx + 1] || null : null;
   const currentModuleState = stateOf(currentModule);
+  // Time for the module on screen: its content duration plus its quiz (the quiz timer defaults to 30 min).
+  const currentModuleTime = (() => {
+    const content = Number(currentModule?.moduleDuration) > 0 ? Number(currentModule.moduleDuration) : 0;
+    const quizTime = Number(currentModule?.quiz?.completion_time);
+    const quiz = currentModule?.hasQuiz ? (quizTime > 0 ? quizTime : 30) : 0;
+    const type = String(currentModule?.moduleType || '').toLowerCase();
+    const contentLabel = type === 'video' ? 'video' : type === 'offline' ? 'practical' : 'reading';
+    return { content, quiz, total: content + quiz, contentLabel };
+  })();
 
   const goToModuleQuiz = (module) => {
     if (!module || !course?.documentId) return;
@@ -928,25 +930,24 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         <PageSection>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-10">
             {/* Left Column: Video + Content */}
-            <div className="lg:col-span-2">
-              {/* Icons row above video */}
-              <div className="flex items-center gap-6 mb-2">
-                <div className="flex items-center gap-2 text-gray-700">
-                  <FolderOpen className="w-5 h-5 text-primary" />
-                  <span className="text-sm">
-                      {contents.length} {contents.length === 1 ? "section" : "sections"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-700">
-                  <Clock className="w-5 h-5 text-primary" />
-                  <span className="text-sm">{totalModuleTimeMin || "Duration"} mins</span>
-                </div>
-              </div>
-
+            <div className="lg:col-span-2 lg:flex lg:flex-col">
               {currentModule && (
-                <h2 className="text-lg font-semibold text-gray-900 mt-10">
-                  {currentModule.moduleTitle || currentModule.title}
-                </h2>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-7">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {currentModule.moduleTitle || currentModule.title}
+                  </h2>
+                  {currentModuleTime.total > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-light text-primary px-3 py-1 text-sm font-semibold">
+                      <Clock className="w-4 h-4" />
+                      {currentModuleTime.total} min
+                      {currentModuleTime.content > 0 && currentModuleTime.quiz > 0 && (
+                        <span className="font-normal text-gray-600">
+                          {`· ${currentModuleTime.content} min ${currentModuleTime.contentLabel} + ${currentModuleTime.quiz} min quiz`}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
               )}
 
               {/* Show content based on module kind / moduleType */}
@@ -1014,10 +1015,10 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                   )}
                 </>
               ) : String(currentModule?.moduleType || '').toLowerCase() === 'pdf' ? (
-                <div className="bg-white rounded-xl border border-gray-200 mt-4 overflow-hidden">
+                <div className="bg-white rounded-xl border border-gray-200 mt-4 overflow-hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
                   {currentModule?.pdf_file?.url ? (
                     <>
-                      <div className="relative w-full h-[467px] overflow-hidden pointer-events-none">
+                      <div className="relative w-full h-[467px] lg:h-auto lg:flex-1 lg:min-h-[240px] overflow-hidden pointer-events-none">
                         {pdfPreviewLoading ? (
                           <div className="w-full h-full flex items-center justify-center text-gray-500">
                             Loading PDF preview...
@@ -1040,7 +1041,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                           </div>
                         )}
                       </div>
-                      <div className="p-4">
+                      <div className="p-4 shrink-0">
                         <button
                           onClick={() => { handleContentEngaged(); setShowFullReadingView(true); }}
                           className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition cursor-pointer"
@@ -1055,9 +1056,9 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                   )}
                 </div>
               ) : currentModule?.moduleType === 'Text' ? (
-                <div className="bg-white rounded-xl border border-gray-200 mt-4 overflow-hidden">
+                <div className="bg-white rounded-xl border border-gray-200 mt-4 overflow-hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
                   {/* Reading Content Preview Container */}
-                  <div className="p-4 space-y-5 max-h-[467px] overflow-hidden">
+                  <div className="p-4 space-y-5 max-h-[467px] lg:max-h-none lg:flex-1 lg:min-h-[240px] overflow-hidden">
                     {currentModule.text_content ? (
                       <div
                         className="rich-content text-sm text-gray-700 leading-relaxed"
@@ -1068,7 +1069,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                     )}
                   </div>
                   {/* View Full Content Button */}
-                  <div className="p-4">
+                  <div className="p-4 shrink-0">
                     <button
                       onClick={() => { handleContentEngaged(); setShowFullReadingView(true); }}
                       className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition cursor-pointer"
@@ -1104,43 +1105,38 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
               )}
             </div>
 
-            {/* Right Column: Stats + Course Contents */}
+            {/* Right Column: Stats + Course Contents. On large screens it stays below the top bar and is never taller
+                than the screen: only the module list scrolls, so more modules do not stretch the page. */}
             <div className="lg:col-span-1 mt-18">
-              <CourseStats course={course} progressPercentage={courseProgress.progressPercentage} quizScore={courseProgress.quizScore} totalModuleTimeMin={totalModuleTimeMin} />
-              <CourseContentList
-                contents={contents}
-                current={currentModule?.moduleId || currentModule?.id || 0}
-                courseId={course.documentId}
-                category={category}
-                course={course}
-                selectedLanguage={selectedLanguage}
-                onMarkAsRead={handleMarkAsRead}
-                moduleStates={courseProgress.moduleStates}
-                onTakeQuiz={goToModuleQuiz}
-              />
-              <FinalAssessment
-                unlocked={allModulesCompleted || !!quizModule}
-                allModulesCompleted={allModulesCompleted}
-                quizModuleId={quizModule ? quizModule.moduleId || quizModule.id : null}
-                quizModuleTitle={quizModule?.moduleTitle || null}
-                pendingOfflineTitle={pendingOfflineModule?.moduleTitle || null}
-                category={category}
-                courseId={course.documentId}
-                isCompleted={courseProgress.progressStatus === "Completed"}
-                quizScore={courseProgress.quizScore}
-                quizAlreadyTaken={courseProgress.quizAlreadyTaken}
-                hasPendingReattempt={courseProgress.hasPendingReattempt}
-                hasRejectedReattempt={courseProgress.hasRejectedReattempt}
-                needsReattemptRequest={courseProgress.needsReattemptRequest}
-                reattemptRequestLoading={reattemptRequestLoading}
-                reattemptRequestError={reattemptRequestError}
-                onSendReattemptRequest={handleSendReattemptFromCourse}
-                needsFeedbackSubmission={courseProgress.needsFeedbackSubmission}
-                onOpenFeedback={() => setShowFeedbackForm(true)}
-                selectedLanguage={selectedLanguage}
-                hasQuizInSelectedLanguage={hasQuizInSelectedLanguage}
-                quizPendingReview={quizPendingReview}
-              />
+              <div className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] flex flex-col">
+                <div className="shrink-0">
+                  <CourseStats course={course} progressPercentage={courseProgress.progressPercentage} quizScore={courseProgress.quizScore} totalModuleTimeMin={totalModuleTimeMin} moduleStates={courseProgress.moduleStates} />
+                </div>
+                <CourseContentList
+                  contents={contents}
+                  current={currentModule?.moduleId || currentModule?.id || 0}
+                  courseId={course.documentId}
+                  category={category}
+                  course={course}
+                  selectedLanguage={selectedLanguage}
+                  onMarkAsRead={handleMarkAsRead}
+                  moduleStates={courseProgress.moduleStates}
+                  onTakeQuiz={goToModuleQuiz}
+                  // What used to be the separate "Module Quiz" card: re-attempt and feedback actions on the module cards.
+                  quizActions={{
+                    moduleId: quizModule ? quizModule.moduleId || quizModule.id : null,
+                    needsRequest: courseProgress.needsReattemptRequest,
+                    pending: courseProgress.hasPendingReattempt,
+                    rejected: courseProgress.hasRejectedReattempt,
+                    loading: reattemptRequestLoading,
+                    error: reattemptRequestError,
+                    onSendRequest: handleSendReattemptFromCourse,
+                    needsFeedback: courseProgress.needsFeedbackSubmission,
+                    onOpenFeedback: () => setShowFeedbackForm(true),
+                    courseCompleted: courseProgress.progressStatus === "Completed",
+                  }}
+                />
+              </div>
             </div>
           </div>
         </PageSection>

@@ -1,13 +1,9 @@
 import React from "react";
-import { Lock, CheckCircle2, Hourglass } from "lucide-react";
-import { useRouter } from 'next/navigation';
+import { CheckCircle2, Hourglass } from "lucide-react";
 
 export default function FinalAssessment({
   unlocked,
-  category,
-  courseId,
   isCompleted,
-  quizScore,
   hasPendingReattempt,
   hasRejectedReattempt,
   needsReattemptRequest,
@@ -20,46 +16,33 @@ export default function FinalAssessment({
   hasQuizInSelectedLanguage,
   // Quizzes belong to online modules: the module whose quiz is due now, if any.
   allModulesCompleted = false,
-  quizModuleId = null,
   quizModuleTitle = null,
   pendingOfflineTitle = null,
   // The module quiz attempt has descriptive answers waiting for admin review.
   quizPendingReview = false,
 }) {
-  const router = useRouter();
-  const query = new URLSearchParams();
-  if (selectedLanguage) query.set("lang", selectedLanguage);
-  if (quizModuleId) query.set("moduleId", quizModuleId);
-  const assessmentQuery = query.toString() ? `?${query.toString()}` : "";
   const heading = allModulesCompleted
     ? "Course Completion"
     : quizModuleTitle
       ? `Module Quiz — ${quizModuleTitle}`
       : "Module Quiz";
+  // This card is shown only for what the module cards cannot show: waiting for an offline assessment,
+  // re-attempt request / pending / rejected, feedback, course completed, no quiz in this language.
+  // "Locked", "result under review" and "Take quiz" are already on the module card, so the card is left out.
   if (!unlocked) {
+    if (!pendingOfflineTitle) return null;
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
         <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
         <div className="flex justify-center">
           <div className="w-full border border-gray-200 rounded-xl flex flex-col items-center p-4 shadow-sm bg-gray-50">
-            {pendingOfflineTitle ? (
-              <>
-                <Hourglass className="w-6 h-6 text-amber-600 mb-2" />
-                <span className="text-base text-gray-600 font-medium text-center">
-                  Waiting for your practical assessment in &ldquo;{pendingOfflineTitle}&rdquo;
-                </span>
-                <span className="text-xs text-gray-500 text-center mt-1">
-                  The next module unlocks once your assessor records your result.
-                </span>
-              </>
-            ) : (
-              <>
-                <Lock className="w-6 h-6 text-gray-400 mb-2" />
-                <span className="text-base text-gray-400 font-medium text-center">
-                  Finish the current module to unlock its quiz
-                </span>
-              </>
-            )}
+            <Hourglass className="w-6 h-6 text-amber-600 mb-2" />
+            <span className="text-base text-gray-600 font-medium text-center">
+              Waiting for your practical assessment in &ldquo;{pendingOfflineTitle}&rdquo;
+            </span>
+            <span className="text-xs text-gray-500 text-center mt-1">
+              The next module unlocks once your assessor records your result.
+            </span>
           </div>
         </div>
       </div>
@@ -81,20 +64,7 @@ export default function FinalAssessment({
       </div>
     );
   }
-  if (quizPendingReview) {
-    return (
-      <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
-        <div className="w-full border border-amber-200 rounded-xl flex flex-col items-center p-4 shadow-sm bg-amber-50">
-          <Hourglass className="w-6 h-6 text-amber-600 mb-2" />
-          <span className="text-base text-gray-700 font-medium text-center">Quiz submitted — result under review</span>
-          <span className="text-xs text-gray-500 text-center mt-1">
-            Your descriptive answers are being checked by an admin. Your final score will appear here once it is published.
-          </span>
-        </div>
-      </div>
-    );
-  }
+  if (quizPendingReview) return null;
   if (hasRejectedReattempt) {
     return (
       <div className="bg-white rounded-xl shadow p-6 mt-6">
@@ -201,17 +171,5 @@ export default function FinalAssessment({
       </div>
     );
   }
-  return (
-    <div className="bg-white rounded-xl shadow p-6 mt-6">
-      <div className="font-semibold text-gray-800 text-lg mb-4">{heading}</div>
-      <div className="flex justify-center">
-        <button
-          className="bg-primary hover:bg-primary/90 text-white font-semibold py-2 px-6 rounded-lg shadow-md transition-all duration-150 text-lg"
-          onClick={() => router.push(`/courses/${category}/${courseId}/assessment${assessmentQuery}`)}
-        >
-          Take Module Quiz
-        </button>
-      </div>
-    </div>
-  );
+  return null;
 }

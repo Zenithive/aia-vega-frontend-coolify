@@ -24,7 +24,10 @@ import LayoutShell from "@/components/layout/LayoutShell";
 import PageContainer from "@/components/layout/PageContainer";
 import telemetryService from '@/services/telemetry';
 
-const getReattemptMarkerKey = (userId, courseId) => `quiz-reattempt:${Number(userId)}:${Number(courseId)}`;
+// Max characters of a descriptive answer — same limit as the backend (quiz.answer schema maxLength).
+const DESCRIPTIVE_ANSWER_MAX_LENGTH = 1300;
+
+const getReattemptMarkerKey =(userId, courseId) => `quiz-reattempt:${Number(userId)}:${Number(courseId)}`;
 
 const writeReattemptMarker = (userId, courseId, value) => {
   if (typeof window === 'undefined') return;
@@ -388,7 +391,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   };
 
   const handleTextChange = (e) => {
-  const val = e.target.value;
+  const val = e.target.value.slice(0, DESCRIPTIVE_ANSWER_MAX_LENGTH);
   setAnswers((prev) => ({
     ...prev,
     [currentQuestion.id]: val,
@@ -428,7 +431,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       };
 
       if (qType === 'Descriptive' || qType === 'Text' || qType === 'Short_answer') {
-        answerPayload.user_answer_for_descriptive_question = typeof selectedVal === 'string' ? selectedVal : '';
+        answerPayload.user_answer_for_descriptive_question =
+          typeof selectedVal === 'string' ? selectedVal.slice(0, DESCRIPTIVE_ANSWER_MAX_LENGTH) : '';
       } else if (qType === 'Multiple_select') {
         const ansArray = Array.isArray(selectedVal) ? selectedVal : (selectedVal !== undefined ? [selectedVal] : []);
         answerPayload.selected_answer_for_multiSelect = ansArray.map(idx => {
@@ -1060,9 +1064,20 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
                   rows={5}
                   value={answers[currentQuestion.id] || ''}
                   onChange={handleTextChange}
-                  placeholder="Type your answer here..."
+                  maxLength={DESCRIPTIVE_ANSWER_MAX_LENGTH}
+                  placeholder={`Type your answer here (up to ${DESCRIPTIVE_ANSWER_MAX_LENGTH} characters)...`}
                   className="w-full p-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm text-gray-800 resize-y"
                 />
+                {(() => {
+                  const used = String(answers[currentQuestion.id] || '').length;
+                  const atLimit = used >= DESCRIPTIVE_ANSWER_MAX_LENGTH;
+                  return (
+                    <span className={`self-end text-xs ${atLimit ? 'text-error font-semibold' : 'text-gray-500'}`}>
+                      {atLimit ? 'Character limit reached · ' : ''}
+                      {used} / {DESCRIPTIVE_ANSWER_MAX_LENGTH}
+                    </span>
+                  );
+                })()}
               </div>
              ) : (<div className="flex flex-col">
               {getQuestionOptions(currentQuestion).map((option, idx) => {

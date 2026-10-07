@@ -12,6 +12,11 @@ import {
   ShieldCheck,
   Wifi,
   ArrowRight,
+  ArrowLeft,
+  Hourglass,
+  FileSearch,
+  XCircle,
+  Circle,
 } from "lucide-react";
 import {
   MOCK_COURSES_CATEGORY_LIST,
@@ -30,6 +35,142 @@ const ICON_MAP = {
   ShieldCheck,
   Wifi,
 };
+
+// Why the quiz cannot be started right now. steps: done | current | failed | todo.
+// (Fixed pixel widths below: max-w-xl etc. resolve to the --spacing-* tokens in globals.css.)
+const BLOCKED_STATES = {
+  review: {
+    icon: FileSearch,
+    tone: "warning",
+    badge: "Under review",
+    title: "Your answers are being reviewed",
+    description:
+      "Your last attempt has descriptive answers that an admin is checking. You can't take the quiz again until the review is finished.",
+    steps: () => [
+      { label: "Quiz submitted", status: "done" },
+      { label: "Admin reviews your descriptive answers", status: "current" },
+      { label: "You get a notification with your final score", status: "todo" },
+    ],
+  },
+  pending: {
+    icon: Hourglass,
+    tone: "warning",
+    badge: "Awaiting approval",
+    title: "Re-attempt request pending",
+    description:
+      "You have used all your attempts, so your request for another attempt has been sent to the admin. You can take the quiz again once it is approved.",
+    steps: () => [
+      { label: "Re-attempt request sent", status: "done" },
+      { label: "Admin approves your request", status: "current" },
+      { label: "Take the quiz again", status: "todo" },
+    ],
+  },
+  rejected: {
+    icon: XCircle,
+    tone: "danger",
+    badge: "Request declined",
+    title: "Your re-attempt request was rejected",
+    description:
+      "The admin did not approve another attempt. You can send a new request after 24 hours. If you think this is a mistake, contact your Learning & Development team.",
+    steps: (canRequestAgainAt) => [
+      { label: "Re-attempt request sent", status: "done" },
+      { label: "Request rejected by the admin", status: "failed" },
+      {
+        label: canRequestAgainAt
+          ? `You can request again after ${new Date(canRequestAgainAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
+          : "You can request again after 24 hours",
+        status: "todo",
+      },
+    ],
+  },
+};
+
+const TONES = {
+  warning: { bar: "bg-warning", iconBg: "bg-warning-light-bg", icon: "text-warning", badge: "bg-warning-light-bg text-warning border-warning/30" },
+  danger: { bar: "bg-red-500", iconBg: "bg-red-50", icon: "text-red-600", badge: "bg-red-50 text-red-700 border-red-200" },
+};
+
+function QuizStatusCard({ state, canRequestAgainAt, onBackToCourse, onBackToCourses }) {
+  const config = BLOCKED_STATES[state];
+  const tone = TONES[config.tone];
+  const Icon = config.icon;
+  const steps = config.steps(canRequestAgainAt);
+
+  return (
+    <div className="flex justify-center pt-2">
+      <div className="w-full max-w-[640px] bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className={`h-1.5 ${tone.bar}`} />
+
+        <div className="px-6 sm:px-10 pt-10 pb-8 flex flex-col items-center text-center">
+          <span className={`w-16 h-16 rounded-full flex items-center justify-center ${tone.iconBg}`}>
+            <Icon className={`w-8 h-8 ${tone.icon}`} />
+          </span>
+          <span className={`mt-5 px-3 py-1 rounded-full border text-sm font-semibold ${tone.badge}`}>
+            {config.badge}
+          </span>
+          <h2 className="mt-3 text-2xl font-bold text-gray-900">{config.title}</h2>
+          <p className="mt-2 text-base text-gray leading-relaxed max-w-[480px]">{config.description}</p>
+
+          <div className="mt-8 w-full text-left rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <p className="text-sm font-semibold text-gray-900 mb-4">What happens next</p>
+            <ol className="flex flex-col">
+              {steps.map((step, idx) => {
+                const last = idx === steps.length - 1;
+                return (
+                  <li key={step.label} className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      {step.status === "done" ? (
+                        <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                      ) : step.status === "failed" ? (
+                        <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                      ) : step.status === "current" ? (
+                        <span className="w-5 h-5 rounded-full border-2 border-warning flex items-center justify-center shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+                        </span>
+                      ) : (
+                        <Circle className="w-5 h-5 text-gray-300 shrink-0" />
+                      )}
+                      {!last && <span className="w-px flex-1 min-h-4 bg-gray-300 my-1" />}
+                    </div>
+                    <span
+                      className={`text-sm pb-4 ${
+                        step.status === "todo"
+                          ? "text-gray-500"
+                          : step.status === "failed"
+                            ? "text-red-700 font-medium"
+                            : step.status === "current"
+                              ? "text-gray-900 font-semibold"
+                              : "text-gray-700"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-200 px-6 sm:px-10 py-5 flex flex-col-reverse sm:flex-row gap-3 sm:justify-center">
+          <button
+            onClick={onBackToCourse}
+            className="inline-flex items-center justify-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 font-semibold py-3 px-6 rounded-xl transition cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to course
+          </button>
+          <button
+            onClick={onBackToCourses}
+            className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-8 rounded-xl shadow transition cursor-pointer"
+          >
+            Browse all courses
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AssessmentInstructions(props) {
   const router = useRouter();
@@ -192,6 +333,14 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
     );
   }
 
+  const blockedState = blockReviewPending
+    ? "review"
+    : blockRejectedReattempt
+      ? "rejected"
+      : blockStartPendingReattempt
+        ? "pending"
+        : null;
+
   const courseBgStyle = {
     backgroundImage: "url(/course-page-bg.png)",
     backgroundSize: "cover",
@@ -229,6 +378,15 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
         />
 
         <div className="px-xl pb-xl">
+          {blockedState ? (
+            <QuizStatusCard
+              state={blockedState}
+              canRequestAgainAt={canRequestAgainAt}
+              onBackToCourse={() => router.push(`/courses/${category || ""}/${courseId || ""}`)}
+              onBackToCourses={() => router.push("/courses")}
+            />
+          ) : (
+          <>
           <p className="text-muted-foreground mb-6">{subtitle}</p>
 
           {/* Quiz language differs from selected course language */}
@@ -335,109 +493,38 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
             </div>
           )}
 
-          {/* Start Assessment Button / Pending or Rejected Reattempt Block */}
+          {/* Start Assessment Button */}
           <div className="flex flex-col items-center gap-4">
-            {blockReviewPending ? (
-              <>
-                <div className="rounded-xl p-5 mb-2 flex items-start gap-3 border border-warning bg-orange-light max-w-xl w-full">
-                  <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-warning-light-bg">
-                    <Info className="w-4 h-4 text-warning" />
-                  </div>
-                  <div>
-                    <span className="font-semibold text-lg text-warning">
-                      Your answers are being reviewed
-                    </span>
-                    <p className="text-gray mt-1">
-                      Your last attempt has descriptive answers that are being checked by an admin. You will be notified when your final score is published.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => router.push("/courses")}
-                  className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer"
-                >
-                  Back to Courses
-                </button>
-              </>
-            ) : blockRejectedReattempt ? (
-              <>
-                <div className="rounded-xl p-5 mb-2 flex items-start gap-3 border border-red-200 bg-red-50 max-w-xl w-full">
-                  <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-red-100">
-                    <Ban className="w-4 h-4 text-red-600" />
-                  </div>
-                  <div>
-                    <span className="font-semibold text-lg text-red-700">
-                      Your reattempt request was rejected
-                    </span>
-                    <p className="text-gray mt-1">
-                      You can submit a new request after 24 hours. The assessment button will be enabled again after that.
-                      {canRequestAgainAt && (
-                        <span className="block mt-1 text-sm text-red-600">
-                          You can request again after {new Date(canRequestAgainAt).toLocaleString()}.
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => router.push("/courses")}
-                  className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer"
-                >
-                  Back to Courses
-                </button>
-              </>
-            ) : blockStartPendingReattempt ? (
-              <>
-                <div className="rounded-xl p-5 mb-2 flex items-start gap-3 border border-warning bg-orange-light max-w-xl w-full">
-                  <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-warning-light-bg">
-                    <Info className="w-4 h-4 text-warning" />
-                  </div>
-                  <div>
-                    <span className="font-semibold text-lg text-warning">
-                      Re-attempt request pending
-                    </span>
-                    <p className="text-gray mt-1">
-                      Your re-attempt request has been sent. Please wait for admin approval before you can take the assessment again.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => router.push("/courses")}
-                  className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer"
-                >
-                  Back to Courses
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={async () => {
-                  if (blockCheckLoading || startingAssessment) return;
-                  setStartingAssessment(true);
-                  try {
-                    await props.onBeforeStartAssessment?.();
-                    telemetryService.trackLearningQuizStarted({
-                      courseId: props.courseNumericId,
-                      routePath: typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/courses',
-                      quizId: String(props.quiz?.id || props.quiz?.question_set_id || ''),
-                      metadata: {
-                        course_document_id: props.courseId,
-                        course_id: props.courseNumericId,
-                        language: props.selectedLanguage || props.quiz?.language || null,
-                        question_count: Array.isArray(props.quiz?.quiz_questions) ? props.quiz.quiz_questions.length : undefined,
-                      },
-                    });
-                  } finally {
-                    setStartingAssessment(false);
-                    setQuizStarted(true);
-                  }
-                }}
-                disabled={blockCheckLoading || startingAssessment}
-                className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {blockCheckLoading ? "Checking..." : startingAssessment ? "Loading quiz..." : buttonText}
-              </button>
-            )}
+            <button
+              onClick={async () => {
+                if (blockCheckLoading || startingAssessment) return;
+                setStartingAssessment(true);
+                try {
+                  await props.onBeforeStartAssessment?.();
+                  telemetryService.trackLearningQuizStarted({
+                    courseId: props.courseNumericId,
+                    routePath: typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/courses',
+                    quizId: String(props.quiz?.id || props.quiz?.question_set_id || ''),
+                    metadata: {
+                      course_document_id: props.courseId,
+                      course_id: props.courseNumericId,
+                      language: props.selectedLanguage || props.quiz?.language || null,
+                      question_count: Array.isArray(props.quiz?.quiz_questions) ? props.quiz.quiz_questions.length : undefined,
+                    },
+                  });
+                } finally {
+                  setStartingAssessment(false);
+                  setQuizStarted(true);
+                }
+              }}
+              disabled={blockCheckLoading || startingAssessment}
+              className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {blockCheckLoading ? "Checking..." : startingAssessment ? "Loading quiz..." : buttonText}
+            </button>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
