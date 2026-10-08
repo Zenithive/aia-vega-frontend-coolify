@@ -34,7 +34,7 @@ export default function CourseStats({ course, progressPercentage = 0, quizScore,
       iconBg: 'bg-emerald-500',
       label: 'Quizzes Passed',
       value: `${quizStates.filter((s) => s.quiz?.passed).length} / ${quizStates.length}`,
-      note: quizScore != null ? `last score ${quizScore}%` : null,
+      note: quizScore != null ? ` ${quizScore}%` : null,
     },
     quizStates.length === 0 && quizScore != null && { icon: Trophy, iconBg: 'bg-primary', label: 'Test Score', value: `${quizScore}%` },
   ].filter(Boolean);

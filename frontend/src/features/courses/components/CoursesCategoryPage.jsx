@@ -284,7 +284,11 @@ export default function CoursesCategoryPage({ category }) {
                 };
                 const courseUrl = `/courses/${category}/${course.documentId}`;
                 const cardContent = (
-                  <SurfaceCard key={course.id} className="flex flex-col h-full rounded-2xl p-0 overflow-hidden cursor-pointer">
+                  <SurfaceCard
+                    key={course.id}
+                    className="flex flex-col h-full rounded-2xl p-0 overflow-hidden cursor-pointer"
+                  >
+                    {/* Card Media Header */}
                     <div className="relative w-full overflow-hidden pt-4 px-4" style={{ height: 220 }}>
                       <img
                         src={course.image}
@@ -308,36 +312,48 @@ export default function CoursesCategoryPage({ category }) {
                         )}
                       </div>
                       {course.contentType === 'video' && (
-                        <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                           <PlayCircle className="w-12 h-12 text-white/80" />
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col flex-1 px-4 pb-4 gap-2" style={{ paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
-                      <div className={COURSE_CARD_META_ROW_CLASS}>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {(() => {
-                            const minutes = Number(course.durationMinutes);
-                            const fallbackHours = Number(course.duration);
-                            const totalMinutes = Number.isFinite(minutes) && minutes > 0
-                              ? Math.round(minutes)
-                              : Number.isFinite(fallbackHours) && fallbackHours > 0
-                                ? Math.round(fallbackHours * 60)
-                                : 0;
-                            return totalMinutes > 0 ? `${totalMinutes} mins` : '—';
-                          })()}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <BookOpen className="w-4 h-4" />
-                          {course.modules} modules
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <GitBranch className="w-4 h-4" />
-                          Version {course.courseVersion} 
-                        </span>
-                        <span className="flex-1" />
-                        <div className="relative ml-auto h-7 w-7 flex items-center justify-center">
+
+                    {/* Card Content Body */}
+                    <div
+                      className="flex flex-col flex-1 px-4 pb-4 gap-2"
+                      style={{ paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}
+                    >
+                      {/* Metadata Row: Time, Modules, Version, Menu */}
+                      <div className="flex items-center justify-between text-xs text-muted-foreground w-full gap-2 pt-1">
+                        <div className="flex items-center gap-3 sm:gap-4 flex-wrap min-w-0">
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <Clock className="w-4 h-4 shrink-0 text-muted-foreground" />
+                            {(() => {
+                              const minutes = Number(course.durationMinutes);
+                              const fallbackHours = Number(course.duration);
+                              const totalMinutes =
+                                Number.isFinite(minutes) && minutes > 0
+                                  ? Math.round(minutes)
+                                  : Number.isFinite(fallbackHours) && fallbackHours > 0
+                                  ? Math.round(fallbackHours * 60)
+                                  : 0;
+                              return totalMinutes > 0 ? `${totalMinutes} mins` : '—';
+                            })()}
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+                            {course.modules} modules
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <GitBranch className="w-4 h-4 shrink-0 text-muted-foreground" />
+                            v{course.courseVersion}
+                          </span>
+                        </div>
+
+                        {/* Options Menu Button & Dropdown */}
+                        <div className="relative shrink-0 h-7 w-7 flex items-center justify-center ml-auto">
                           {canShowCardMenu ? (
                             <>
                               <button
@@ -353,13 +369,13 @@ export default function CoursesCategoryPage({ category }) {
                                     return next;
                                   });
                                 }}
-                                className="p-1 rounded-full hover:bg-gray-100 text-muted-foreground"
+                                className="p-1 rounded-full hover:bg-gray-100 text-muted-foreground transition-colors"
                                 title="More options"
                               >
                                 <MoreVertical className="w-5 h-5" />
                               </button>
                               {openMenuId === course.id && (
-                                <div className="absolute right-0 mt-2 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
+                                <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                                   <button
                                     type="button"
                                     onClick={(e) => handleFeedbackClick(e, course)}
@@ -381,27 +397,28 @@ export default function CoursesCategoryPage({ category }) {
                           )}
                         </div>
                       </div>
-                      <div
-                        className={COURSE_CARD_TITLE_CLASS}
-                        title={course.title}
-                      >
+
+                      {/* Course Title */}
+                      <div className={COURSE_CARD_TITLE_CLASS} title={course.title}>
                         {course.title}
                       </div>
-                      {/* Learner's own due date (user progress, else the assignment's). The row is always
-                          rendered so cards keep the same height. */}
-                      <div className="flex items-center gap-1 text-small h-5">
+
+                      {/* Due Date Indicator */}
+                      <div className="flex items-center gap-1 text-sm h-5">
                         {course.deadline && !isCompleted && formatDueDate(course.deadline) ? (
                           <span
-                            className={`flex items-center gap-1 ${
-                              isLockedByDeadline ? 'text-red-600 font-medium' : 'text-muted-foreground'
+                            className={`flex items-center gap-1.5 whitespace-nowrap ${
+                              isLockedByDeadline ? 'text-red-600 font-medium' : 'text-muted-foreground-100'
                             }`}
                           >
-                            <CalendarDays className="w-4 h-4" />
+                            <CalendarDays className="w-4 h-4 shrink-0" />
                             {isLockedByDeadline ? 'Overdue · was due ' : 'Due '}
                             {formatDueDate(course.deadline)}
                           </span>
                         ) : null}
                       </div>
+
+                      {/* Card Actions Button */}
                       <div className={COURSE_CARD_ACTION_CLASS}>
                         {isInProgress && (
                           <Button
@@ -412,7 +429,8 @@ export default function CoursesCategoryPage({ category }) {
                                 : 'bg-primary text-white'
                             }`}
                           >
-                            {isLockedByDeadline ? 'Course Disabled' : 'Continue Course'} <ChevronRight className={`w-5 h-5 ${isLockedByDeadline ? 'opacity-60' : ''}`} />
+                            {isLockedByDeadline ? 'Course Disabled' : 'Continue Course'}{' '}
+                            <ChevronRight className={`w-5 h-5 ${isLockedByDeadline ? 'opacity-60' : ''}`} />
                           </Button>
                         )}
                         {isNotStarted && (
@@ -424,7 +442,8 @@ export default function CoursesCategoryPage({ category }) {
                                 : 'bg-primary text-white'
                             }`}
                           >
-                            {isLockedByDeadline ? 'Course Disabled' : 'Start Course'} <ChevronRight className={`w-5 h-5 ${isLockedByDeadline ? 'opacity-60' : ''}`} />
+                            {isLockedByDeadline ? 'Course Disabled' : 'Start Course'}{' '}
+                            <ChevronRight className={`w-5 h-5 ${isLockedByDeadline ? 'opacity-60' : ''}`} />
                           </Button>
                         )}
                         {isCompleted && (

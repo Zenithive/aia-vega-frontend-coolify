@@ -135,7 +135,7 @@ export default function CourseContentList({ contents, current, onSelect, courseI
       </h3>
       <div
         ref={listRef}
-        className="relative flex flex-col gap-3 lg:min-h-[120px] lg:overflow-y-auto lg:-mx-2 lg:px-2 lg:pt-1 lg:pb-4"
+        className="relative flex flex-col gap-3 lg:min-h-[120px] lg:overflow-y-auto lg:-mx-2 lg:px-2 lg:pt-1 lg:pb-4 scrollbar-hide"
       >
         {modules.map((module, idx) => {
           const modId = module.moduleId || module.id;

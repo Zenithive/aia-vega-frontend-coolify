@@ -932,7 +932,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             {/* Left Column: Video + Content */}
             <div className="lg:col-span-2 lg:flex lg:flex-col">
               {currentModule && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-7">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-8">
                   <h2 className="text-lg font-semibold text-gray-900">
                     {currentModule.moduleTitle || currentModule.title}
                   </h2>
