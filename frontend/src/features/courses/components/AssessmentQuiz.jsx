@@ -521,6 +521,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         maxScore: 100,
         durationSeconds: Math.max(1, Math.round(quizDurationSeconds - currentTimeLeft)),
         metadata: {
+          module_id: moduleId != null ? String(moduleId) : null,
           course_id: Number(courseNumericId),
           user_id: Number(userId),
           passed: userPassed,
@@ -576,6 +577,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         maxScore: null,
         durationSeconds: Math.max(1, Math.round(quizDurationSeconds - currentTimeLeft)),
         metadata: {
+          module_id: moduleId != null ? String(moduleId) : null,
           course_id: Number(courseNumericId),
           user_id: Number(userId),
           failed: true,
@@ -773,6 +775,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         entityId: String(courseNumericId),
         pageType: 'CourseAssessment',
         metadata: {
+          module_id: moduleId != null ? String(moduleId) : null,
           course_id: Number(courseNumericId),
           user_id: Number(userId),
           requested_for_attempt: requestedForAttempt ?? null,

@@ -215,6 +215,9 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     moduleEnterTimeRef.current = null;
     modulePausedAtRef.current = null;
     modulePausedMsRef.current = 0;
+    // Background time for the module enter/exit telemetry (same rules as the module timer)
+    let telemetryHiddenAt = null;
+    let telemetryHiddenMs = 0;
 
     // Pause the timer when the tab goes to background, resume when it returns
     const handleVisibilityChange = () => {
@@ -223,6 +226,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         if (pdfNewTabRef.current) return;
         // Tab hidden — record when we paused
         modulePausedAtRef.current = Date.now();
+        telemetryHiddenAt = Date.now();
       } else {
         // Clear the PDF-new-tab flag when user comes back
         pdfNewTabRef.current = false;
@@ -230,6 +234,10 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         if (modulePausedAtRef.current != null) {
           modulePausedMsRef.current += Date.now() - modulePausedAtRef.current;
           modulePausedAtRef.current = null;
+        }
+        if (telemetryHiddenAt != null) {
+          telemetryHiddenMs += Date.now() - telemetryHiddenAt;
+          telemetryHiddenAt = null;
         }
       }
     };
@@ -253,6 +261,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
         moduleIndex: currentModuleIdx,
         moduleTitle,
         routePath,
+        hiddenMs: telemetryHiddenMs + (telemetryHiddenAt != null ? Date.now() - telemetryHiddenAt : 0),
         metadata: {
           module_id: String(moduleId),
           language: selectedLanguage,

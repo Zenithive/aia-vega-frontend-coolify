@@ -390,14 +390,17 @@ function trackLearningModuleEnter({ courseId, moduleIndex = null, moduleTitle = 
   });
 }
 
-// 2) Module exit (duration calculated automatically)
-function trackLearningModuleExit({ courseId, moduleIndex = null, moduleTitle = null, routePath, metadata = {} }) {
+// 2) Module exit (duration calculated automatically; hiddenMs = time the tab was in the background)
+function trackLearningModuleExit({ courseId, moduleIndex = null, moduleTitle = null, routePath, hiddenMs = 0, metadata = {} }) {
   const base = baseLearningPayload({ courseId, routePath, moduleIndex, moduleTitle, metadata });
   if (!base) return null;
 
   const key = `${base.entityId}::${moduleIndex ?? 'na'}`;
   const startedAt = learningModuleSessions.get(key);
-  const durationSeconds = startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 1000)) : 1;
+  // No start recorded (duplicate exit from a remount) → 0, so remounts do not add time.
+  const durationSeconds = startedAt
+    ? Math.max(0, Math.round((Date.now() - startedAt - Math.max(0, Number(hiddenMs) || 0)) / 1000))
+    : 0;
   learningModuleSessions.delete(key);
 
   return trackLearningEvent('learning_module_exit', {
