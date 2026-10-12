@@ -305,6 +305,11 @@ export default function CoursesCategoryPage({ category }) {
                             Completed
                           </Badge>
                         )}
+                        {!course.completed && course.feedbackPending && (
+                          <Badge className="inline-flex items-center justify-center rounded-md px-3 py-1 border border-transparent text-white bg-amber-500/90">
+                            Feedback Pending
+                          </Badge>
+                        )}
                         {course.completed && course.certificationGenerated && (
                           <span className="absolute top-0 right-0 mr-12 bg-yellow rounded-md p-1 shadow-md flex items-center">
                             <Award className="w-6 h-6 text-white" />
@@ -405,7 +410,7 @@ export default function CoursesCategoryPage({ category }) {
 
                       {/* Due Date Indicator */}
                       <div className="flex items-center gap-1 text-sm h-5">
-                        {course.deadline && !isCompleted && formatDueDate(course.deadline) ? (
+                        {course.deadline && formatDueDate(course.deadline) ? (
                           <span
                             className={`flex items-center gap-1.5 whitespace-nowrap ${
                               isLockedByDeadline ? 'text-red-600 font-medium' : 'text-muted-foreground-100'
@@ -422,14 +427,14 @@ export default function CoursesCategoryPage({ category }) {
                       <div className={COURSE_CARD_ACTION_CLASS}>
                         {isInProgress && (
                           <Button
-                            onClick={(event) => handleStartCourse(event, course, courseUrl)}
+                            onClick={(event) => handleStartCourse(event, course, course.feedbackPending ? `${courseUrl}?feedback=1` : courseUrl)}
                             className={`${COURSE_CARD_ACTION_BUTTON_BASE} ${
                               isLockedByDeadline
                                 ? 'bg-gray-300 text-gray-700 hover:bg-gray-300 cursor-pointer'
                                 : 'bg-primary text-white'
                             }`}
                           >
-                            {isLockedByDeadline ? 'Course Disabled' : 'Continue Course'}{' '}
+                            {isLockedByDeadline ? 'Course Disabled' : course.feedbackPending ? 'Submit Feedback' : 'Continue Course'}{' '}
                             <ChevronRight className={`w-5 h-5 ${isLockedByDeadline ? 'opacity-60' : ''}`} />
                           </Button>
                         )}

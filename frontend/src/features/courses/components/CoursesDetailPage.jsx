@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import MarkdownIt from "markdown-it";
 import { useRouter, useParams, usePathname, useSearchParams } from "next/navigation";
-import { FolderOpen, Clock, Maximize2, Languages, User, ListOrdered, CheckCircle2, ClipboardCheck, Hourglass } from "lucide-react";
+import { FolderOpen, Clock, Maximize2, Languages, User, ListOrdered, CheckCircle2, ClipboardCheck, Hourglass, MessageSquare } from "lucide-react";
 import PageHeader from "@/components/common/PageHeader";
 import PageSection from "@/components/common/PageSection";
 import CourseStats from "./CourseStats";
@@ -940,6 +940,24 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-10">
             {/* Left Column: Video + Content */}
             <div className="lg:col-span-2 lg:flex lg:flex-col">
+              {/* All modules done but feedback not sent yet: the course completes only after feedback. */}
+              {courseProgress.needsFeedbackSubmission && (
+                <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <MessageSquare className="w-6 h-6 text-amber-600 shrink-0" aria-hidden />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">Feedback pending</p>
+                    <p className="text-sm text-gray-700">
+                      You have finished all modules. Submit your feedback to complete this course.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowFeedbackForm(true)}
+                    className="shrink-0 flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition cursor-pointer"
+                  >
+                    Submit Feedback
+                  </button>
+                </div>
+              )}
               {currentModule && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-8">
                   <h2 className="text-lg font-semibold text-gray-900">

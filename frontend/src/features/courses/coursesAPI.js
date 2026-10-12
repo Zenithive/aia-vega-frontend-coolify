@@ -403,7 +403,7 @@ export const fetchUserCourseProgress = async (userId, courseNumericId, opts = {}
     const response = await api.get('/user-progress/progress', { params });
     const data = response?.data || response;
     const completedModules = Array.isArray(data?.completed_modules) ? data.completed_modules.map(String) : [];
-    const feedbackSubmitted = !!data?.feedback_submission;
+    const feedbackSubmitted = data?.feedback_submitted ?? !!data?.feedback_submission;
     const progressPercentage = data?.progress_percentage ?? 0;
     const selectedLanguage = data?.selected_language ?? null;
     return {

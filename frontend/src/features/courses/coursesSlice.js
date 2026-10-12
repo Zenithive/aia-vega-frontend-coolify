@@ -34,6 +34,8 @@ export const loadAllCourses = createAsyncThunk(
             certificationGenerated: progressByCourse[c.id]?.certificate_issued ?? c.certificationGenerated,
             progressStatus: progressByCourse[c.id]?.progress_status ?? null,
             feedbackSubmitted: progressByCourse[c.id]?.feedback_submitted ?? false,
+            // All modules done, but compulsory feedback not sent yet (course is not complete).
+            feedbackPending: progressByCourse[c.id]?.feedback_pending === true,
             // The learner's own due date (user-progress) wins over the assignment-level one.
             deadline: progressByCourse[c.id]?.due_date || c.deadline,
           }))
