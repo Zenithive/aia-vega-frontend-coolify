@@ -11,9 +11,12 @@ const isPastDeadline = (deadline) => {
 const withDeadlineLock = (course) => {
   const status = String(course?.progressStatus || '').trim().toLowerCase();
   const isCompleted = course?.completed === true || status === 'completed';
+  const isDueDatePassed = isPastDeadline(course?.deadline);
   return {
     ...course,
-    isDeadlineLocked: !isCompleted && isPastDeadline(course?.deadline),
+    isDeadlineLocked: !isCompleted && isDueDatePassed,
+    // Feedback closes at the due date, also for completed courses.
+    isDueDatePassed,
   };
 };
 

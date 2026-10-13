@@ -363,6 +363,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   const progressPercent = ((currentIndex + 1) / totalQuestions) * 100;
 
   const handleSelectOption = (optionIndex) => {
+    // Answers are locked while the quiz is being submitted.
+    if (isSubmittingRef.current || submittedRef.current) return;
     const isMulti = currentQuestion.question_type === 'Multiple_select';
     
     setAnswers((prev) => {
@@ -387,10 +389,12 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   };
 
   const handlePrevious = () => {
+    if (isSubmittingRef.current) return;
     if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
   };
 
   const handleTextChange = (e) => {
+  if (isSubmittingRef.current || submittedRef.current) return;
   const val = e.target.value.slice(0, DESCRIPTIVE_ANSWER_MAX_LENGTH);
   setAnswers((prev) => ({
     ...prev,
@@ -1067,9 +1071,10 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
                   rows={5}
                   value={answers[currentQuestion.id] || ''}
                   onChange={handleTextChange}
+                  disabled={isSubmitting}
                   maxLength={DESCRIPTIVE_ANSWER_MAX_LENGTH}
                   placeholder={`Type your answer here (up to ${DESCRIPTIVE_ANSWER_MAX_LENGTH} characters)...`}
-                  className="w-full p-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm text-gray-800 resize-y"
+                  className="w-full p-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary text-sm text-gray-800 resize-y disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 {(() => {
                   const used = String(answers[currentQuestion.id] || '').length;
@@ -1095,9 +1100,10 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
                   <label
                     key={option?.option_key ?? idx}
                     onClick={() => handleSelectOption(idx)}
-                    className={`flex items-center gap-3 p-4 cursor-pointer rounded-xl border mb-4 shadow-sm transition-colors ${
-                      isSelected ? "border-primary bg-primary-light/50" : "border-gray-100 hover:bg-gray-50"
-                    }`}
+                    aria-disabled={isSubmitting || undefined}
+                    className={`flex items-center gap-3 p-4 rounded-xl border mb-4 shadow-sm transition-colors ${
+                      isSelected ? "border-primary bg-primary-light/50" : "border-gray-100"
+                    } ${isSubmitting ? "cursor-not-allowed opacity-60" : `cursor-pointer ${isSelected ? "" : "hover:bg-gray-50"}`}`}
                   >
                     <span
                       className={`shrink-0 flex items-center justify-center ${
@@ -1130,9 +1136,9 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button
             onClick={handlePrevious}
-            disabled={currentIndex === 0}
+            disabled={currentIndex === 0 || isSubmitting}
             className={`flex items-center gap-1.5 px-7 py-2.5 rounded-full text-sm font-semibold transition cursor-pointer ${
-              currentIndex === 0
+              currentIndex === 0 || isSubmitting
                 ? "bg-gray-300 text-white cursor-not-allowed"
                 : "bg-primary text-white hover:bg-primary/90"
             }`}
