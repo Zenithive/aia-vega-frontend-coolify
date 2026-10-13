@@ -95,6 +95,8 @@ export default function CoursesCategoryPage({ category }) {
     event.preventDefault();
     event.stopPropagation();
 
+    if (course?.isDueDatePassed) return;
+
     const userId = getCurrentUserId();
     if (!userId) {
       window.alert('Please log in to submit feedback.');
@@ -276,12 +278,14 @@ export default function CoursesCategoryPage({ category }) {
                 const isLockedByDeadline = !!course.isDeadlineLocked;
                 const canShowCardMenu = !isCompleted || !course.feedbackSubmitted;
                 const feedbackKey = String(course.id ?? course.documentId ?? '');
-                const feedbackState = feedbackEligibility[feedbackKey] || {
-                  checked: false,
-                  loading: false,
-                  canSubmit: false,
-                  reason: '',
-                };
+                const feedbackState = course.isDueDatePassed
+                  ? { checked: true, loading: false, canSubmit: false, reason: 'Feedback is closed because the due date has passed.' }
+                  : feedbackEligibility[feedbackKey] || {
+                      checked: false,
+                      loading: false,
+                      canSubmit: false,
+                      reason: '',
+                    };
                 const courseUrl = `/courses/${category}/${course.documentId}`;
                 const cardContent = (
                   <SurfaceCard
@@ -363,7 +367,7 @@ export default function CoursesCategoryPage({ category }) {
                                   e.stopPropagation();
                                   setOpenMenuId((prev) => {
                                     const next = prev === course.id ? null : course.id;
-                                    if (next === course.id) {
+                                    if (next === course.id && !course.isDueDatePassed) {
                                       ensureFeedbackEligibility(course);
                                     }
                                     return next;
