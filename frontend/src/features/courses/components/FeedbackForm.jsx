@@ -147,10 +147,12 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
   const [answers, setAnswers] = useState({});
   const [showMissing, setShowMissing] = useState(false);
 
-  const setAnswer = (questionId, value) =>
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const setAnswer = (questionId, value) => {
+    if (isSubmitting) return;
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
   const [submitError, setSubmitError] = useState(null);
 
   const answeredCount = activeQuestions.filter((q) => isAnswered(answers[q.question_id])).length;
@@ -320,8 +322,12 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
               </div>
             </div>
 
-            {/* Questions */}
-            <div className="px-6 sm:px-10 py-4 divide-y divide-gray-100">
+            {/* Questions — a disabled fieldset locks every answer while the feedback is being submitted. */}
+            <fieldset
+              disabled={isSubmitting}
+              aria-busy={isSubmitting || undefined}
+              className="min-w-0 px-6 sm:px-10 py-4 divide-y divide-gray-100 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               {activeQuestions.map((q, index) => {
                 const qid = q.question_id;
                 const missing = showMissing && isRequired(q) && !isAnswered(answers[qid]);
@@ -359,7 +365,7 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
                   </section>
                 );
               })}
-            </div>
+            </fieldset>
 
             {/* Footer */}
             <div className="px-6 sm:px-10 py-5 border-t border-gray-100 bg-gray-50/70">
