@@ -28,7 +28,7 @@ const COURSE_CARD_ACTION_BUTTON_BASE = 'rounded-md font-normal px-6 py-2 flex it
 const COURSE_PAGE_SIZE = 6;
 const COURSE_HARD_SCROLL_DISTANCE = 240;
 const GROUP_LABEL_QUERY = 'group';
-const ALL_GROUP_LABEL = { id: 'all', documentId: 'all', name: 'All groups' };
+const ALL_GROUP_LABEL = { id: 'all', documentId: 'all', name: 'All' };
 
 function groupLabelStorageKey(category) {
   return `course-group-label:${String(category || '').toLowerCase()}`;
@@ -93,6 +93,7 @@ export default function CoursesCategoryPage({ category }) {
   const paginationRef = useRef(pagination);
   const loadingRef = useRef(false);
   const requestIdRef = useRef(0);
+  const scrollContainerRef = useRef(null);
   const isAllLabels = selectedGroupLabel?.documentId === ALL_GROUP_LABEL.documentId;
   paginationRef.current = pagination;
 
@@ -105,12 +106,48 @@ export default function CoursesCategoryPage({ category }) {
     message: '',
   });
 
+  // Scroll visibility states for arrows
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
+
   const courseBgStyle = {
     backgroundImage: 'url(/course-page-bg.png)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
   };
+
+  const scrollGroupLabels = (direction) => {
+    if (scrollContainerRef.current) {
+      const scrollAmount = 200;
+      scrollContainerRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  const checkScrollPosition = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftArrow(scrollLeft > 5);
+    setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 5);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    checkScrollPosition();
+    el.addEventListener('scroll', checkScrollPosition);
+    window.addEventListener('resize', checkScrollPosition);
+
+    return () => {
+      el.removeEventListener('scroll', checkScrollPosition);
+      window.removeEventListener('resize', checkScrollPosition);
+    };
+  }, [groupLabels, checkScrollPosition]);
 
   // Load group labels for this category on mount
   useEffect(() => {
@@ -133,6 +170,7 @@ export default function CoursesCategoryPage({ category }) {
         rememberGroupLabel(category, nextLabel.documentId);
         setSelectedGroupLabel(nextLabel);
         setLoadingLabels(false);
+        setTimeout(checkScrollPosition, 50);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -144,7 +182,7 @@ export default function CoursesCategoryPage({ category }) {
     return () => {
       cancelled = true;
     };
-  }, [category]);
+  }, [category, checkScrollPosition]);
 
   const appendCourses = (currentCourses, incomingCourses) => {
     const seen = new Set(currentCourses.map((course) => String(course.id || course.documentId)));
@@ -682,47 +720,77 @@ export default function CoursesCategoryPage({ category }) {
 
       <main>
         <PageSection className="px-xl pt-2">
-            {/* Group Tab Pills Row */}
+            {/* Group Tab Pills Row with Prominent Circular Arrows & Fades */}
             {!loadingLabels && groupLabels.length > 0 && (
-              <div className="mb-6 flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
-                <div className="flex items-center gap-2 text-gray-800 whitespace-nowrap">
-                  <Layers className="w-5 h-5 text-primary" />
-                  <span className="text-base font-semibold">Course group:</span>
-                </div>
+  <div className="mb-6 relative flex items-center">
+    {/* Left Fade Overlay & Circular Arrow Button */}
+    {showLeftArrow && (
+      <div className="absolute left-0 z-30 h-full flex items-center pl-2 bg-gradient-to-r from-[#fafafa] via-[#fafafa]/80 to-transparent pointer-events-none">
+        <button
+          type="button"
+          onClick={() => scrollGroupLabels('left')}
+          className="pointer-events-auto flex items-center justify-center w-9 h-9 bg-white/80 backdrop-blur-md hover:bg-gray-900 border border-gray-300 rounded-full shadow-lg text-gray-800 hover:text-white transition-all hover:scale-105 active:scale-95 group"
+          title="Scroll left"
+        >
+          <ChevronRight className="w-5 h-5 rotate-180 stroke-[2.5]" />
+        </button>
+      </div>
+    )}
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleGroupLabelSelect(ALL_GROUP_LABEL)}
-                    className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-xl transition-all shadow-sm ${
-                      selectedGroupLabel?.documentId === ALL_GROUP_LABEL.documentId
-                        ? 'bg-primary text-white shadow-primary/25'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    {ALL_GROUP_LABEL.name}
-                  </button>
+    {/* Scrollable Container with Hidden Scrollbars */}
+    <div
+      ref={scrollContainerRef}
+      onScroll={checkScrollPosition}
+      className="w-full overflow-x-auto px-1 py-1 flex items-center gap-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <div className="flex items-center gap-2 min-w-max">
+        <button
+          type="button"
+          onClick={() => handleGroupLabelSelect(ALL_GROUP_LABEL)}
+          className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-xl transition-all shadow-sm ${
+            selectedGroupLabel?.documentId === ALL_GROUP_LABEL.documentId
+              ? 'bg-primary text-white shadow-primary/25'
+              : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          {ALL_GROUP_LABEL.name}
+        </button>
 
-                  {groupLabels.map((label) => {
-                    const isSelected = selectedGroupLabel?.documentId === label.documentId;
-                    return (
-                      <button
-                        key={label.documentId}
-                        type="button"
-                        onClick={() => handleGroupLabelSelect(label)}
-                        className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-xl transition-all shadow-sm ${
-                          isSelected
-                            ? 'bg-primary text-white shadow-primary/25'
-                            : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        {label.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+        {groupLabels.map((label) => {
+          const isSelected = selectedGroupLabel?.documentId === label.documentId;
+          return (
+            <button
+              key={label.documentId}
+              type="button"
+              onClick={() => handleGroupLabelSelect(label)}
+              className={`whitespace-nowrap px-4 py-2 text-sm font-medium rounded-xl transition-all shadow-sm ${
+                isSelected
+                  ? 'bg-primary text-white shadow-primary/25'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {label.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    {/* Right Fade Overlay & Circular Arrow Button */}
+    {showRightArrow && (
+      <div className="absolute right-0 z-30 h-full flex items-center pr-2 bg-gradient-to-l from-[#fafafa] via-[#fafafa]/80 to-transparent pointer-events-none">
+        <button
+          type="button"
+          onClick={() => scrollGroupLabels('right')}
+          className="pointer-events-auto flex items-center justify-center w-9 h-9 bg-white/80 backdrop-blur-md hover:bg-gray-900 border border-gray-300 rounded-full shadow-lg text-gray-800 hover:text-white transition-all hover:scale-105 active:scale-95 group"
+          title="Scroll right"
+        >
+          <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+        </button>
+      </div>
+    )}
+  </div>
+)}
 
             {loadingLabels ? (
               <div className="min-h-[50vh] flex items-center justify-center">
