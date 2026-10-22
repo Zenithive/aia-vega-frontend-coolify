@@ -125,15 +125,24 @@ api.get = function (url, config) {
   const params = config?.params ?? {};
   const key = `${url}?${JSON.stringify(params)}`;
   const now = Date.now();
-  const cached = recentCache.get(key);
-  if (cached && now - cached.at < DEDUPE_MS) return cached.promise;
+  const skipRecentCache = config?.skipRecentCache === true;
+  if (!skipRecentCache) {
+    const cached = recentCache.get(key);
+    if (cached && now - cached.at < DEDUPE_MS) return cached.promise;
+  }
   if (inFlight.has(key)) return inFlight.get(key);
-  const promise = originalGet(url, config);
+  const requestConfig = config ? { ...config } : {};
+  delete requestConfig.skipRecentCache;
+  const promise = originalGet(url, requestConfig);
   inFlight.set(key, promise);
-  promise.finally(() => {
+  promise.then(() => {
     inFlight.delete(key);
-    recentCache.set(key, { promise, at: Date.now() });
-    setTimeout(() => recentCache.delete(key), DEDUPE_MS);
+    if (!skipRecentCache) {
+      recentCache.set(key, { promise, at: Date.now() });
+      setTimeout(() => recentCache.delete(key), DEDUPE_MS);
+    }
+  }, () => {
+    inFlight.delete(key);
   });
   return promise;
 };

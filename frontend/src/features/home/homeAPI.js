@@ -315,6 +315,29 @@ function getCurrentUserId() {
   }
 }
 
+function modulesForLearner(course, selectedLanguage) {
+  const all = Array.isArray(course?.modules)
+    ? course.modules
+    : Array.isArray(course?.modulesList)
+      ? course.modulesList
+      : [];
+  const byLanguage = (language) => all.filter(
+    (module) => String(module?.language || '').trim().toLowerCase() === language
+  );
+  const selected = String(selectedLanguage || '').trim().toLowerCase();
+  if (selected) {
+    const matched = byLanguage(selected);
+    if (matched.length) return matched;
+  }
+  const declared = Array.isArray(course?.course_language) ? course.course_language : [];
+  const primary = String(declared[0] || all[0]?.language || '').trim().toLowerCase();
+  if (primary) {
+    const matched = byLanguage(primary);
+    if (matched.length) return matched;
+  }
+  return all;
+}
+
 function getCurrentUserInfo() {
   if (typeof window === 'undefined') return {};
   try {
@@ -420,14 +443,17 @@ export const fetchMyCourses = async () => {
   const progressMap = {};
   const setProgressEntry = (courseId, entry) => {
     if (courseId == null || !entry || typeof entry !== 'object') return;
-    progressMap[String(courseId)] = {
+    const stored = {
       completedModules: Array.isArray(entry.completed_modules)
         ? entry.completed_modules.map(String)
         : [],
       progressStatus: entry.progress_status ?? null,
       progressPercentage: Number(entry.progress_percentage ?? 0) || 0,
+      selectedLanguage: entry.selected_language ?? null,
       dueDate: entry.due_date ?? null,
     };
+    progressMap[String(courseId)] = stored;
+    if (entry.course_document_id) progressMap[String(entry.course_document_id)] = stored;
   };
 
   if (allProgressRes.status === 'fulfilled' && allProgressRes.value) {
@@ -451,14 +477,10 @@ export const fetchMyCourses = async () => {
       : {};
 
   return courses.map((c) => {
-    const courseModules = Array.isArray(c.modules)
-      ? c.modules
-      : Array.isArray(c.modulesList)
-        ? c.modulesList
-        : [];
-    const totalLessons = courseModules.length;
     const courseId = c.id ?? c.documentId;
-    const progressEntry = progressMap[String(courseId)] || null;
+    const progressEntry = progressMap[String(courseId)] || progressMap[String(c.documentId)] || null;
+    const courseModules = modulesForLearner(c, progressEntry?.selectedLanguage);
+    const totalLessons = courseModules.length;
     const completedModules = progressEntry?.completedModules || [];
     const completedLessonsById = courseModules.filter((m) =>
       completedModules.includes(String(m.id)) ||
@@ -468,6 +490,9 @@ export const fetchMyCourses = async () => {
 
     const statusNorm = String(progressEntry?.progressStatus || '').trim().toLowerCase();
     const progressFromApi = Math.min(100, Math.max(0, Math.round(Number(progressEntry?.progressPercentage || 0))));
+    const progressFromModules = totalLessons > 0
+      ? Math.min(100, Math.round((completedLessonsById / totalLessons) * 100))
+      : 0;
 
     let progress = 0;
     let completedLessons = completedLessonsById;
@@ -477,11 +502,13 @@ export const fetchMyCourses = async () => {
       completedLessons = totalLessons;
     } else if (progressFromApi > 0) {
       progress = progressFromApi;
-      completedLessons = totalLessons > 0
-        ? Math.min(totalLessons, Math.round((progressFromApi / 100) * totalLessons))
-        : completedLessonsById;
+      completedLessons = completedLessonsById > 0
+        ? completedLessonsById
+        : (totalLessons > 0
+          ? Math.min(totalLessons, Math.round((progressFromApi / 100) * totalLessons))
+          : 0);
     } else {
-      progress = totalLessons > 0 ? Math.min(100, Math.round((completedLessonsById / totalLessons) * 100)) : 0;
+      progress = progressFromModules;
       completedLessons = completedLessonsById;
     }
 

@@ -1,5 +1,6 @@
 import api from '@/services/api';
 import API_ENDPOINTS from '@/services/endpoints';
+import { getCurrentUserId } from '@/lib/auth';
 import { USE_MOCK_DATA, mockDelay, MOCK_COURSE_CATEGORIES } from '@/services/mockData';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337/api').replace(/\/api\/?$/, '');
@@ -112,11 +113,23 @@ function normalizeCourse(course) {
   const quiz = rawModules
     .filter((m) => m?.module_type !== 'Offline' && m?.quiz)
     .map((m) => normalizeModuleQuiz(m.quiz, m));
+  
+  // Extract course group label
+  const groupLabel = course.course_group_label;
+  const courseGroupLabel = groupLabel
+    ? {
+        id: groupLabel.id || null,
+        documentId: groupLabel.documentId || null,
+        name: groupLabel.name || '',
+      }
+    : null;
+
   return {
     id: course.id,
     documentId: course.documentId,
     title: course.title || '',
     category: course.course_category || 'Other',
+    courseGroupLabel,
     // UI fields expected by CoursesCategoryPage (original card design)
     image: withImageUrl(course.thumbnail),
     moduleDuration: durationMinutes || '',
@@ -169,7 +182,7 @@ async function fetchCourseDueDateMap() {
   try {
     const res = await api.get('/course-assignments', {
       params: {
-        'populate[courses]': true,
+        'populate[courses][fields][0]': 'id',
         'populate[departments]': true,
         'populate[individual_user]': true,
         'populate[work_locations]': true,
@@ -218,11 +231,16 @@ async function fetchCourseDueDateMap() {
   return dueDateMap;
 }
 
-const COURSES_LIST_PARAMS = {
+const COURSES_LIST_POPULATE = {
   'populate[thumbnail]': true,
+  'populate[course_group_label]': true,
   'populate[modules][populate][quiz][populate][quiz_questions][populate][options]': true,
-  'pagination[pageSize]': 50,
   sort: 'createdAt:desc',
+};
+
+const COURSES_LIST_PARAMS = {
+  ...COURSES_LIST_POPULATE,
+  'pagination[pageSize]': 50,
 };
 
 export const fetchAllCourses = async ({ page = 1, pageSize = 9 } = {}) => {
@@ -278,6 +296,7 @@ export const fetchCourseById = async (documentId, opts = {}) => {
     'populate[modules][populate][quiz][populate][quiz_questions][populate][options]': true,
     'populate[modules][populate][quiz][populate][quiz_instruction][populate][checklist]': true,
     'populate[thumbnail]': true,
+    'populate[course_group_label]': true,
     'populate[feedback][populate][feedback_template][populate][questions]': true,
   };
   if (opts.language) params.language = opts.language;
@@ -426,16 +445,193 @@ export const fetchAllUserProgress = async (userId) => {
   if (!userId) return {};
   try {
     const res = await api.get('/user-progress/all', { params: { userId } });
-    return res || {};
+    const data = res?.data && !Array.isArray(res.data) && typeof res.data === 'object' && res.data.progress_status == null
+      ? res.data
+      : res;
+    return data && typeof data === 'object' ? data : {};
   } catch {
     return {};
   }
 };
 
+function isPastDeadline(deadline) {
+  if (!deadline) return false;
+  const dueEndOfDay = new Date(`${String(deadline).slice(0, 10)}T23:59:59`);
+  return Number.isFinite(dueEndOfDay.getTime()) && Date.now() > dueEndOfDay.getTime();
+}
+
+function withLearnerProgress(course, progress) {
+  const progressStatus = progress?.progress_status ?? course.progressStatus ?? null;
+  const completedFromStatus = String(progressStatus || '').trim().toLowerCase() === 'completed';
+  const completed = (progress?.completed ?? completedFromStatus) || course.completed === true;
+  const deadline = progress?.due_date || course.deadline || null;
+  const isDueDatePassed = isPastDeadline(deadline);
+  return {
+    ...course,
+    completed,
+    certificationGenerated: progress?.certificate_issued ?? course.certificationGenerated,
+    progressStatus,
+    feedbackSubmitted: progress?.feedback_submitted ?? course.feedbackSubmitted ?? false,
+    deadline,
+    isDeadlineLocked: !completed && isDueDatePassed,
+    isDueDatePassed,
+  };
+}
+
+async function attachLearnerProgress(items) {
+  const courses = Array.isArray(items) ? items : [];
+  const userId = getCurrentUserId();
+  if (!userId) return courses.map((course) => withLearnerProgress(course, null));
+
+  const progressByCourse = await fetchAllUserProgress(userId);
+  return courses.map((course) => {
+    const progress = progressByCourse?.[course.id] || progressByCourse?.[String(course.id)] || null;
+    return withLearnerProgress(course, progress);
+  });
+}
+
 export const fetchCourseCategories = fetchAllCourses;
+
+/**
+ * Fetch all published course group labels.
+ * Returns all available group labels regardless of course assignment.
+ */
+export const fetchAllCourseGroupLabels = async () => {
+  if (USE_MOCK_DATA) {
+    await mockDelay(200);
+    return [];
+  }
+
+  try {
+    // Fetch all published group labels directly from the course-group-labels endpoint
+    const response = await api.get('/course-group-labels', {
+      params: {
+        'pagination[pageSize]': 100,
+        'sort': 'name:asc',
+      },
+    });
+
+    const data = Array.isArray(response?.data) ? response.data : [];
+    
+    // Filter out labels without names and return
+    return data
+      .filter(label => label && label.documentId && label.name)
+      .map(label => ({
+        id: label.id,
+        documentId: label.documentId,
+        name: label.name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    console.error('Error fetching course group labels:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch course group labels that have a course in this category assigned to the current user.
+ * The API drops labels whose courses are not assigned to this learner.
+ * @param {string} category - Course category (e.g., 'mandatory', 'orientation', 'other')
+ */
+export const fetchCourseGroupLabelsByCategory = async (category) => {
+  if (USE_MOCK_DATA) {
+    await mockDelay(200);
+    return [];
+  }
+
+  try {
+    const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+    
+    const response = await api.get('/course-group-labels', {
+      params: {
+        'filters[courses][course_category][$eq]': normalizedCategory,
+        'filters[courses][active][$ne]': 'unpublished',
+        'pagination[pageSize]': 100,
+        sort: 'name:asc',
+      },
+    });
+
+    const data = Array.isArray(response?.data) ? response.data : [];
+    return data
+      .filter(label => label?.documentId && label?.name)
+      .map(label => ({
+        id: label.id,
+        documentId: label.documentId,
+        name: label.name,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    console.error('Error fetching course group labels:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch courses filtered by category and group label with pagination.
+ * @param {Object} params
+ * @param {string} params.category - Course category
+ * @param {string} [params.groupLabelId] - Group label documentId. Omit or pass "all" to skip the label filter.
+ * @param {number} params.page - Page number (default: 1)
+ * @param {number} params.pageSize - Items per page (default: 3)
+ */
+export const fetchCoursesByGroupLabel = async ({ category, groupLabelId, page = 1, pageSize = 3, search = '' }) => {
+  if (USE_MOCK_DATA) {
+    await mockDelay(300);
+    return { items: [], totalCount: 0, totalPages: 0, currentPage: 1 };
+  }
+
+  try {
+    const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+    
+    const safePage = Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+    const safePageSize = Number.isFinite(Number(pageSize)) && Number(pageSize) > 0 ? Number(pageSize) : 3;
+    const filterByLabel = groupLabelId && groupLabelId !== 'all';
+    const searchTerm = String(search || '').trim();
+
+    const response = await api.get(API_ENDPOINTS.COURSES.LIST, {
+      params: {
+        ...COURSES_LIST_POPULATE,
+        sortBy: 'due_date',
+        ...(searchTerm ? { search: searchTerm } : {}),
+        'filters[course_category][$eq]': normalizedCategory,
+        ...(filterByLabel ? { 'filters[course_group_label][documentId][$eq]': groupLabelId } : {}),
+        'filters[active][$ne]': 'unpublished',
+        'pagination[page]': safePage,
+        'pagination[pageSize]': safePageSize,
+      },
+      skipRecentCache: true,
+    });
+
+    const data = Array.isArray(response?.data) ? response.data : [];
+    const dueDateMap = await fetchCourseDueDateMap();
+    
+    const items = data.map((course) => {
+      const normalizedCourse = normalizeCourse(course);
+      const assignedDueDate = dueDateMap[course?.id] || null;
+      return {
+        ...normalizedCourse,
+        deadline: assignedDueDate || normalizedCourse.deadline || null,
+      };
+    });
+
+    const meta = response?.meta?.pagination || {};
+    return {
+      items: await attachLearnerProgress(items),
+      totalCount: meta.total || items.length,
+      totalPages: meta.pageCount || 1,
+      currentPage: meta.page || page,
+    };
+  } catch (error) {
+    console.error('Error fetching courses by group label:', error);
+    return { items: [], totalCount: 0, totalPages: 0, currentPage: 1 };
+  }
+};
 
 export default {
   fetchAllCourses,
   fetchCourseCategories,
   fetchCourseById,
+  fetchAllCourseGroupLabels,
+  fetchCourseGroupLabelsByCategory,
+  fetchCoursesByGroupLabel,
 };

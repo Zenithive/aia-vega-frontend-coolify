@@ -45,7 +45,7 @@ export async function searchCourses(query) {
   try {
     const response = await api.get(API_ENDPOINTS.COURSES.LIST, {
       params: {
-        'filters[title][$containsi]': q,
+        search: q,
         'pagination[pageSize]': SEARCH_COURSES_LIMIT,
         'pagination[page]': 1,
         'populate[thumbnail]': 'url',
