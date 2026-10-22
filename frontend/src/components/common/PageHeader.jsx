@@ -33,18 +33,18 @@ export default function PageHeader({
         </div>
 
         {(title || titleRight) ? (
-          <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center justify-between gap-4 flex-wrap w-full">
             {title ? (
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-h1 text-gray-dark">{title}</h1>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <h1 className="text-h1 text-gray-dark truncate">{title}</h1>
                 {formattedVersion ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-md font-semibold bg-primary/10 text-primary border border-primary/20">
+                  <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-md font-semibold bg-primary/10 text-primary border border-primary/20">
                     v{formattedVersion}
                   </span>
                 ) : null}
               </div>
             ) : null}
-            {titleRight ? <div className="shrink-0">{titleRight}</div> : null}
+            {titleRight ? <div className="shrink-0 ml-auto">{titleRight}</div> : null}
           </div>
         ) : null}
 

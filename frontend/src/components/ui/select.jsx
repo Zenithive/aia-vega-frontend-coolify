@@ -29,6 +29,7 @@ export default function Select({
   variant = 'default',
   disabled = false,
   multiSelect = false,
+  className,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -92,7 +93,8 @@ export default function Select({
           'relative w-full overflow-hidden rounded-[12px] border border-gray-100 bg-white px-4 pr-10 text-left text-small shadow-sm',
           wrapValue ? 'min-h-12 h-auto py-2' : 'h-12',
           hasValue ? 'text-black' : 'text-gray-text',
-          disabled && 'cursor-not-allowed bg-gray-50 text-gray-400'
+          disabled && 'cursor-not-allowed bg-gray-50 text-gray-400',
+          className,
         )}
       >
         <span
