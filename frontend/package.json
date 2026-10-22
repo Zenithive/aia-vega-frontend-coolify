@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node api.js && next dev --webpack",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "start": "node api.js && next start",
+    "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
