@@ -26,6 +26,7 @@ import AssessmentQuiz from "./AssessmentQuiz";
 import { getLatestSubmission, checkPendingReattemptRequest } from "../quizSubmissionAPI";
 import { getCurrentUserId } from "@/lib/auth";
 import telemetryService from '@/services/telemetry';
+import { getFeedbackForLanguage, hasFeedbackQuestions } from "../feedbackUtils";
 
 const ICON_MAP = {
   Timer,
@@ -303,13 +304,10 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
   }
   const resultData = props.quiz?.resultData; // optional, fallback to mock in AssessmentQuiz
 
-  // Pick feedback questions matching the quiz language, fall back to first entry
-  const feedbackForLang =
-    (props.feedback || []).find(fb => fb.language === props.quiz?.language) ||
-    (props.feedback || [])[0];
+  const feedbackForLang = getFeedbackForLanguage(props.feedback, props.quiz?.language);
   const feedbackQuestions = feedbackForLang?.questions || [];
-  // compulsory is a yes-no-toggle custom field: true = mandatory, false/null = optional
-  const feedbackCompulsory = feedbackForLang?.compulsory === true;
+  const feedbackCompulsory =
+    hasFeedbackQuestions(feedbackForLang) && feedbackForLang?.compulsory === true;
   // Course feedback belongs after the quiz that completes the course, not after every module quiz.
   const isFinalModule = props.isFinalModule !== false;
 

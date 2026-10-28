@@ -16,13 +16,13 @@ import {
 import {
   MOCK_ASSESSMENT_QUESTIONS,
   MOCK_ASSESSMENT_RESULTS,
-  getCourseFeedbackConfig,
 } from "@/services/mockData";
 import { submitQuiz, getLatestSubmission, sendReattemptRequest, checkPendingReattemptRequest } from "../quizSubmissionAPI";
 import FeedbackForm from "./FeedbackForm";
 import LayoutShell from "@/components/layout/LayoutShell";
 import PageContainer from "@/components/layout/PageContainer";
 import telemetryService from '@/services/telemetry';
+import { hasFeedbackQuestions } from "../feedbackUtils";
 
 // Max characters of a descriptive answer — same limit as the backend (quiz.answer schema maxLength).
 const DESCRIPTIVE_ANSWER_MAX_LENGTH = 1300;
@@ -275,7 +275,8 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   const resultData = resultDataProp || MOCK_ASSESSMENT_RESULTS;
   const totalQuestions = questions.length;
   // Course feedback is only asked after the quiz that completes the course (last module quiz).
-  const feedbackMandatory = isFinalModule ? (feedbackCompulsory ?? getCourseFeedbackConfig(courseId).mandatory) : false;
+  const hasFeedbackForm = isFinalModule && hasFeedbackQuestions({ questions: feedbackQuestions });
+  const feedbackMandatory = hasFeedbackForm && feedbackCompulsory === true;
   const quizDurationSeconds = (quizDuration != null && quizDuration > 0 ? quizDuration : 30) * 60;
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -809,6 +810,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
   };
 
   const openFeedbackForm = () => {
+    if (!hasFeedbackForm) return;
     setShowFeedbackForm(true);
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set('feedback', '1');
@@ -944,7 +946,7 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
         feedbackMandatory={feedbackMandatory}
         feedbackSubmitted={feedbackSubmitted}
         onOpenFeedback={openFeedbackForm}
-        showFeedback={isFinalModule}
+        showFeedback={hasFeedbackForm}
         continueLabel={isFinalModule ? null : 'Continue to next module'}
         attemptNumber={attemptNumber}
         maxAttempt={maxAttempt}

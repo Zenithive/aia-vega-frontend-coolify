@@ -219,13 +219,6 @@ export const MOCK_ASSESSMENT_QUESTIONS = [
   // { id: 25, question: "Which of the following promotes a safe digital workspace?", options: ["Sharing passwords with trusted colleagues", "Using strong passwords and enabling two-factor authentication", "Clicking on all email links to stay informed", "Disabling antivirus software for faster performance"], correctAnswer: 1 },
 ];
 
-// Feedback form config (replace with API call when backend is ready)
-// Returns { mandatory: boolean } - when true, user must submit feedback before "Back to Courses"
-export function getCourseFeedbackConfig(courseId) {
-  // Mock: treat as mandatory for course "1", optional for others
-  return { mandatory: String(courseId) === "1" };
-}
-
 // Mock assessment result screens
 export const MOCK_ASSESSMENT_RESULTS = {
   pass: {
