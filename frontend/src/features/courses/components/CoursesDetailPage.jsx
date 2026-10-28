@@ -17,6 +17,7 @@ import { getLatestSubmission, checkPendingReattemptRequest, sendReattemptRequest
 import { getCurrentUserId } from "@/lib/auth";
 import telemetryService from '@/services/telemetry';
 import { getSocket } from '@/services/socket';
+import { hasFeedbackQuestions } from '../feedbackUtils';
 
 const md = new MarkdownIt({ html: true, breaks: true });
 
@@ -90,7 +91,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
   const [showFullReadingView, setShowFullReadingView] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [showFeedbackSuccess, setShowFeedbackSuccess] = useState(false);
-  const [courseProgress, setCourseProgress] = useState({ progressStatus: null, quizScore: null, hasPendingReattempt: false, hasRejectedReattempt: false, hasApprovedReattempt: false, needsFeedbackSubmission: false, needsReattemptRequest: false, latestAttemptNumber: null, maxAttempt: null, progressPercentage: 0, moduleStates: [] });
+  const [courseProgress, setCourseProgress] = useState({ progressStatus: null, quizScore: null, hasPendingReattempt: false, hasRejectedReattempt: false, hasApprovedReattempt: false, needsFeedbackSubmission: false, feedbackSubmitted: false, needsReattemptRequest: false, latestAttemptNumber: null, maxAttempt: null, progressPercentage: 0, moduleStates: [] });
   const [reattemptRequestLoading, setReattemptRequestLoading] = useState(false);
   const [reattemptRequestError, setReattemptRequestError] = useState(null);
   const skipNextProgressUpdate = useRef(false);
@@ -118,13 +119,28 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     }
   }, [courseLanguages, selectedLanguage]);
 
-  // If user comes from course card with ?feedback=1, open feedback form directly
   const feedbackFromQuery = searchParams.get('feedback');
   useEffect(() => {
-    if (feedbackFromQuery === '1') {
+    if (feedbackFromQuery !== '1') return;
+    if (!course) return;
+
+    const languageNorm = String(selectedLanguage || '').trim().toLowerCase();
+    const feedbackForLanguage = Array.isArray(course?.feedback)
+      ? course.feedback.find(
+          (feedback) => String(feedback?.language || '').trim().toLowerCase() === languageNorm
+        )
+      : null;
+    if (hasFeedbackQuestions(feedbackForLanguage)) {
       setShowFeedbackForm(true);
+      return;
     }
-  }, [feedbackFromQuery]);
+
+    setShowFeedbackForm(false);
+    const paramsCopy = new URLSearchParams(searchParams?.toString() || "");
+    paramsCopy.delete("feedback");
+    const queryString = paramsCopy.toString();
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname);
+  }, [feedbackFromQuery, course, selectedLanguage, pathname, router, searchParams]);
 
   if (!course) return <div className="p-8">Course not found.</div>;
 
@@ -154,6 +170,11 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
   const feedbacks = allFeedbacks.filter(
     (fb) => (fb.language || "").trim().toLowerCase() === selectedLangNorm
   );
+  const feedbackFormConfigured = hasFeedbackQuestions(feedbacks[0]);
+  const feedbackCompulsory = feedbackFormConfigured && feedbacks[0]?.compulsory === true;
+  const isCourseCompleted =
+    courseProgress.progressStatus === "Completed" &&
+    !(feedbackCompulsory && courseProgress.needsFeedbackSubmission);
   const totalModuleTimeMin = contents.reduce((sum, m) => {
     const d = Number(m.moduleDuration);
     return sum + (Number.isFinite(d) && d > 0 ? d : 0);
@@ -341,16 +362,14 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
       if (!urlHasLang && savedLang && courseLanguages.some((l) => (l || '').trim().toLowerCase() === savedLang.trim().toLowerCase())) {
         setSelectedLanguage(savedLang);
       }
+      const needsFeedback = allModulesDone(moduleStates) && !feedbackSubmitted;
       if (skipNextProgressUpdate.current) {
         skipNextProgressUpdate.current = false;
-        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
+        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, feedbackSubmitted, needsFeedbackSubmission: needsFeedback, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
       } else {
         dispatch(initializeModuleReadState(completedModules));
-        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
+        setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, feedbackSubmitted, needsFeedbackSubmission: needsFeedback, hasPendingReattempt: hasPending, hasRejectedReattempt: hasRejected, hasApprovedReattempt: hasApprovedFromApi }));
       }
-      // Feedback comes after every module is completed (not after a single quiz).
-      const needsFeedback = allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== "Completed";
-      setCourseProgress((p) => ({ ...p, needsFeedbackSubmission: needsFeedback }));
 
       if (!quizModuleId) return;
       getLatestSubmission(userId, courseIdForApi, quizModuleId).then((res) => {
@@ -438,7 +457,8 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             progressStatus,
             progressPercentage,
             moduleStates,
-            needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== 'Completed',
+            feedbackSubmitted,
+            needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted,
             hasPendingReattempt: hasPendingResolved,
             hasRejectedReattempt: hasRejectedResolved,
             hasApprovedReattempt: hasApprovedResolved,
@@ -650,7 +670,8 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           progressPercentage,
           progressStatus,
           moduleStates,
-          needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted && progressStatus !== 'Completed',
+          feedbackSubmitted,
+          needsFeedbackSubmission: allModulesDone(moduleStates) && !feedbackSubmitted,
         }));
       }
     } catch (err) {
@@ -807,7 +828,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
 
   // Feedback form: when user passed quiz but hasn't submitted feedback
   if (showFeedbackForm) {
-    const feedbackForLang = feedbacks[0];
+    const feedbackForLang = feedbackFormConfigured ? feedbacks[0] : null;
     const feedbackQuestions = feedbackForLang?.questions || [];
     const userId = getCurrentUserId();
     const courseNumericId = course.id ?? course.documentId;
@@ -829,11 +850,23 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
             onSubmit={(response) => {
               setShowFeedbackForm(false);
               setShowFeedbackSuccess(true);
+              setCourseProgress((p) => ({
+                ...p,
+                feedbackSubmitted: true,
+                needsFeedbackSubmission: false,
+              }));
               // Refetch progress - backend finalizeCourse sets Completed
               if (userId && courseNumericId) {
                 fetchUserCourseProgress(userId, courseNumericId, { fresh: true }).then(({ completedModules, progressStatus, progressPercentage, moduleStates }) => {
                   dispatch(initializeModuleReadState(completedModules));
-                  setCourseProgress((p) => ({ ...p, progressStatus, progressPercentage, moduleStates, needsFeedbackSubmission: false }));
+                  setCourseProgress((p) => ({
+                    ...p,
+                    progressStatus,
+                    progressPercentage,
+                    moduleStates,
+                    feedbackSubmitted: true,
+                    needsFeedbackSubmission: false,
+                  }));
                   const quizModuleId = pickQuizModuleId(moduleStates);
                   if (progressStatus === "Completed" && quizModuleId) {
                     getLatestSubmission(userId, courseNumericId, quizModuleId).then((res) => {
@@ -940,6 +973,26 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-10">
             {/* Left Column: Video + Content */}
             <div className="lg:col-span-2 lg:flex lg:flex-col">
+              {/* Keep feedback visible after the learner finishes all modules until it is submitted. */}
+              {courseProgress.needsFeedbackSubmission && feedbackFormConfigured && (
+                <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <MessageSquare className="w-6 h-6 text-amber-600 shrink-0" aria-hidden />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900">Feedback pending</p>
+                    <p className="text-sm text-gray-700">
+                      {feedbackCompulsory
+                        ? "You have finished all modules. Submit your feedback to complete this course."
+                        : "You have finished all modules. Your course is complete, but feedback is still pending."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowFeedbackForm(true)}
+                    className="shrink-0 flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition cursor-pointer"
+                  >
+                    Submit Feedback
+                  </button>
+                </div>
+              )}
               {currentModule && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-8">
                   <h2 className="text-lg font-semibold text-gray-900">
@@ -1140,9 +1193,9 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                     loading: reattemptRequestLoading,
                     error: reattemptRequestError,
                     onSendRequest: handleSendReattemptFromCourse,
-                    needsFeedback: courseProgress.needsFeedbackSubmission,
-                    onOpenFeedback: () => setShowFeedbackForm(true),
-                    courseCompleted: courseProgress.progressStatus === "Completed",
+                    needsFeedback: courseProgress.needsFeedbackSubmission && feedbackFormConfigured,
+                    onOpenFeedback: feedbackFormConfigured ? () => setShowFeedbackForm(true) : undefined,
+                    courseCompleted: isCourseCompleted,
                   }}
                 />
               </div>

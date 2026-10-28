@@ -8,12 +8,13 @@ import SurfaceCard from '@/components/common/SurfaceCard';
 import Loader from '@/components/common/Loader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, MoreVertical, ChevronRight, Clock, BookOpen, GitBranch, Award, CalendarDays, Tag, Search, Layers, X } from 'lucide-react';
+import { PlayCircle, ChevronRight, Clock, BookOpen, GitBranch, Award, CalendarDays, Tag, Search, Layers, X, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { fetchUserCourseProgress, fetchCourseGroupLabelsByCategory, fetchCoursesByGroupLabel } from '@/features/courses/coursesAPI';
 import { getLatestSubmission } from '../quizSubmissionAPI';
 import { getCurrentUserId } from '@/lib/auth';
+import { getFeedbackForLanguage, hasFeedbackQuestions } from '../feedbackUtils';
 
 const CATEGORY_LABELS = {
   mandatory: 'Mandatory Training',
@@ -98,8 +99,6 @@ export default function CoursesCategoryPage({ category }) {
   paginationRef.current = pagination;
 
   // UI state
-  const [openMenuId, setOpenMenuId] = useState(null);
-  const [feedbackEligibility, setFeedbackEligibility] = useState({});
   const [startBlockModal, setStartBlockModal] = useState({
     open: false,
     title: '',
@@ -328,9 +327,20 @@ export default function CoursesCategoryPage({ category }) {
 
       const passedQuiz = latest?.submission?.passed === true;
       const feedbackSubmitted = progressInfo?.feedbackSubmitted === true;
+      const feedbackForLanguage = getFeedbackForLanguage(
+        course?.feedback,
+        progressInfo?.selectedLanguage || course?.selectedLanguage
+      );
+      if (!hasFeedbackQuestions(feedbackForLanguage)) {
+        window.alert('This course does not have a feedback form configured for your language.');
+        return;
+      }
+      const courseCompleted =
+        course?.completed === true ||
+        String(course?.progressStatus || '').trim().toLowerCase() === 'completed' ||
+        course?.feedbackPending === true;
 
-      if (passedQuiz && !feedbackSubmitted) {
-        setOpenMenuId(null);
+      if ((passedQuiz || courseCompleted) && !feedbackSubmitted) {
         const feedbackUrl = `/courses/${category}/${course.documentId}?feedback=1`;
         window.location.href = feedbackUrl;
       } else {
@@ -343,90 +353,6 @@ export default function CoursesCategoryPage({ category }) {
     } catch (err) {
       console.error('Failed to check feedback eligibility:', err);
       window.alert('Could not verify feedback eligibility. Please open the course to continue.');
-    }
-  };
-
-  const ensureFeedbackEligibility = async (course) => {
-    const key = String(course.id ?? course.documentId ?? '');
-    if (!key) return;
-
-    const existing = feedbackEligibility[key];
-    if (existing && (existing.loading || existing.checked)) return;
-
-    const userId = getCurrentUserId();
-    const courseNumericId = course.id ?? course.documentId;
-
-    if (!userId) {
-      setFeedbackEligibility((prev) => ({
-        ...prev,
-        [key]: {
-          checked: true,
-          loading: false,
-          canSubmit: false,
-          reason: 'Please log in to submit feedback.',
-        },
-      }));
-      return;
-    }
-
-    if (!courseNumericId) {
-      setFeedbackEligibility((prev) => ({
-        ...prev,
-        [key]: {
-          checked: true,
-          loading: false,
-          canSubmit: false,
-          reason: 'Course information is incomplete.',
-        },
-      }));
-      return;
-    }
-
-    setFeedbackEligibility((prev) => ({
-      ...prev,
-      [key]: {
-        checked: false,
-        loading: true,
-        canSubmit: false,
-        reason: '',
-      },
-    }));
-
-    try {
-      const [progressInfo, latest] = await Promise.all([
-        fetchUserCourseProgress(userId, courseNumericId, { fresh: true }),
-        getLatestSubmission(userId, courseNumericId),
-      ]);
-      const passedQuiz = latest?.submission?.passed === true;
-      const feedbackSubmitted = progressInfo?.feedbackSubmitted === true;
-      const canSubmit = passedQuiz && !feedbackSubmitted;
-
-      let reason = '';
-      if (!passedQuiz) {
-        reason = 'Enable after passing this course assessment.';
-      } else if (feedbackSubmitted) {
-        reason = 'Feedback already submitted.';
-      }
-
-      setFeedbackEligibility((prev) => ({
-        ...prev,
-        [key]: {
-          checked: true,
-          loading: false,
-          canSubmit,
-          reason,
-        },
-      }));
-    } catch {
-      setFeedbackEligibility((prev) => ({
-        ...prev,
-        [key]: {
-          checked: true,
-          loading: false,
-          canSubmit: false,
-          reason: 'Could not verify eligibility right now.',
-        },
-      }));
     }
   };
 
@@ -460,16 +386,23 @@ export default function CoursesCategoryPage({ category }) {
     const isInProgress = !course.completed && (progressStatus === 'in_progress' || progressStatus === 'failed');
     const isCompleted = !!course.completed || progressStatus === 'completed';
     const isLockedByDeadline = !!course.isDeadlineLocked;
-    const canShowCardMenu = !isCompleted || !course.feedbackSubmitted;
-    const feedbackKey = String(course.id ?? course.documentId ?? '');
-    const feedbackState = course.isDueDatePassed
-      ? { checked: true, loading: false, canSubmit: false, reason: 'Feedback is closed because the due date has passed.' }
-      : feedbackEligibility[feedbackKey] || {
-          checked: false,
-          loading: false,
-          canSubmit: false,
-          reason: '',
-        };
+    const feedbackForLanguage = getFeedbackForLanguage(course.feedback, course.selectedLanguage);
+    const hasFeedbackForm = hasFeedbackQuestions(feedbackForLanguage);
+    const feedbackCompulsory = hasFeedbackForm && feedbackForLanguage.compulsory === true;
+    const isFeedbackPending =
+      feedbackCompulsory &&
+      !course.feedbackSubmitted &&
+      (course.feedbackPending || isCompleted);
+    const isOptionalFeedbackAvailable =
+      hasFeedbackForm &&
+      !feedbackCompulsory &&
+      !course.feedbackSubmitted;
+    const isPrePendingCompulsoryFeedbackAvailable =
+      feedbackCompulsory &&
+      !course.feedbackSubmitted &&
+      !isFeedbackPending;
+    const isGiveFeedbackAvailable =
+      isOptionalFeedbackAvailable || isPrePendingCompulsoryFeedbackAvailable;
     const courseUrl = `/courses/${category}/${course.documentId}`;
 
     return (
@@ -565,45 +498,32 @@ export default function CoursesCategoryPage({ category }) {
                 </span>
               </div>
 
-              <div className="relative shrink-0 h-7 w-7 flex items-center justify-center ml-auto">
-                {canShowCardMenu ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setOpenMenuId((prev) => {
-                          const next = prev === course.id ? null : course.id;
-                          if (next === course.id && !course.isDueDatePassed) {
-                            ensureFeedbackEligibility(course);
-                          }
-                          return next;
-                        });
-                      }}
-                      className="p-1 rounded-full hover:bg-gray-100 text-muted-foreground transition-colors"
-                      title="More options"
-                    >
-                      <MoreVertical className="w-5 h-5" />
-                    </button>
-                    {openMenuId === course.id && (
-                      <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
-                        <button
-                          type="button"
-                          onClick={(e) => handleFeedbackClick(e, course)}
-                          disabled={feedbackState.loading || !feedbackState.canSubmit}
-                          title={feedbackState.reason || undefined}
-                          className={`w-full text-left px-3 py-2 text-sm ${
-                            feedbackState.loading || !feedbackState.canSubmit
-                              ? 'text-gray-400 cursor-not-allowed bg-gray-50'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {feedbackState.loading ? 'Checking...' : 'Feedback'}
-                        </button>
-                      </div>
-                    )}
-                  </>
+              <div className={`relative shrink-0 flex items-center justify-center ml-auto ${isFeedbackPending || isGiveFeedbackAvailable ? 'h-7 w-auto' : 'h-7 w-7'}`}>
+                {isFeedbackPending ? (
+                  <button
+                    type="button"
+                    onClick={(event) => handleFeedbackClick(event, course)}
+                    className="inline-flex h-7 items-center gap-1 rounded-md bg-amber-100 px-1.5 whitespace-nowrap text-[10px] font-semibold text-amber-800 hover:bg-amber-200 transition-colors"
+                    title="Submit pending course feedback"
+                  >
+                    <MessageSquare className="h-3 w-3" aria-hidden="true" />
+                    Pending Feedback
+                  </button>
+                ) : isGiveFeedbackAvailable ? (
+                  <button
+                    type="button"
+                    onClick={(event) => handleFeedbackClick(event, course)}
+                    disabled={isLockedByDeadline}
+                    className="inline-flex h-7 items-center gap-1 rounded-md bg-gray-100 px-1.5 whitespace-nowrap text-[10px] font-semibold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    title={
+                      isLockedByDeadline
+                        ? 'Feedback is closed because the due date has passed.'
+                        : 'Give course feedback'
+                    }
+                  >
+                    <MessageSquare className="h-3 w-3" aria-hidden="true" />
+                    Give Feedback
+                  </button>
                 ) : (
                   <span className="inline-block h-7 w-7" aria-hidden="true" />
                 )}
@@ -615,16 +535,18 @@ export default function CoursesCategoryPage({ category }) {
             </div>
 
             <div className="flex items-center justify-between gap-2 min-h-[24px] mt-1">
-              {course.courseGroupLabel && course.courseGroupLabel.name ? (
-                <div className="flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                    {course.courseGroupLabel.name}
-                  </span>
-                </div>
-              ) : (
-                <div></div>
-              )}
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                {course.courseGroupLabel && course.courseGroupLabel.name ? (
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                      {course.courseGroupLabel.name}
+                    </span>
+                  </div>
+                ) : (
+                  <div></div>
+                )}
+              </div>
 
               {course.deadline && formatDueDate(course.deadline) && (
                 <span

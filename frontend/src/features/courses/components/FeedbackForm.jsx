@@ -5,28 +5,6 @@ import api from '@/services/api';
 import Loader from '@/components/common/Loader';
 import telemetryService from '@/services/telemetry';
 
-// Fallback questions used when no API feedback questions are available
-const FALLBACK_QUESTIONS = [
-  {
-    question_id: "objectives",
-    question: "Did you clearly understand the learning objectives of this course?",
-    answer_type: "YesNo",
-    mandatory: true,
-  },
-  {
-    question_id: "relevant",
-    question: "Was the course content relevant to your role?",
-    answer_type: "YesNo",
-    mandatory: true,
-  },
-  {
-    question_id: "quality",
-    question: "How would you rate the quality of the course content?",
-    answer_type: "AgreeOrDisagree",
-    mandatory: true,
-  },
-];
-
 const ANSWER_TYPE_OPTIONS = {
   YesNo: ["Yes", "No"],
   AgreeOrDisagree: ["Strongly Agree", "Agree", "Neutral", "Disagree", "Strongly Disagree"],
@@ -141,8 +119,7 @@ function StarRating({ questionId, value, onChange }) {
 }
 
 export default function FeedbackForm({ questions, onCancel, onSubmit, userId, courseId, courseVersion }) {
-  const activeQuestions =
-    Array.isArray(questions) && questions.length > 0 ? questions : FALLBACK_QUESTIONS;
+  const activeQuestions = Array.isArray(questions) ? questions : [];
 
   const [answers, setAnswers] = useState({});
   const [showMissing, setShowMissing] = useState(false);
@@ -160,6 +137,7 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
   const progressPercent = activeQuestions.length ? Math.round((answeredCount / activeQuestions.length) * 100) : 0;
 
   React.useEffect(() => {
+    if (activeQuestions.length === 0) return;
     const numericCourseId = Number(courseId);
     if (!Number.isFinite(numericCourseId) || numericCourseId <= 0) return;
     telemetryService.trackLearningFeedbackOpened({
@@ -172,6 +150,26 @@ export default function FeedbackForm({ questions, onCancel, onSubmit, userId, co
       },
     });
   }, [courseId, userId, activeQuestions.length]);
+
+  if (activeQuestions.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-lg">
+        <h1 className="text-xl font-semibold text-gray-900">Feedback form unavailable</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          This course does not have a feedback form configured for the selected language.
+        </p>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="mt-6 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+          >
+            Back to course
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

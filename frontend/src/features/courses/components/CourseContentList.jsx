@@ -277,7 +277,7 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     ) : !nextModule && quizActions.needsFeedback && quizActions.onOpenFeedback ? (
-                      /* All modules done: the course completes once feedback is submitted */
+                      /* All modules done: keep the feedback action available until submission. */
                       <button
                         onClick={quizActions.onOpenFeedback}
                         className="flex-1 flex items-center justify-center h-10 gap-2 p-3 rounded-xl text-sm font-semibold transition bg-primary text-white hover:bg-primary/90 cursor-pointer"
