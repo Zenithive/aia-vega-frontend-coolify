@@ -2,6 +2,7 @@ import api from '@/services/api';
 import API_ENDPOINTS from '@/services/endpoints';
 import { getCurrentUserId } from '@/lib/auth';
 import { USE_MOCK_DATA, mockDelay, MOCK_COURSE_CATEGORIES } from '@/services/mockData';
+import { getFeedbackForLanguage, hasFeedbackQuestions } from './feedbackUtils';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337/api').replace(/\/api\/?$/, '');
 
@@ -89,11 +90,9 @@ function normalizeModule(module, index) {
 }
 
 function normalizeCourse(course) {
-  const rawModules =
-    Array.isArray(course.modules) ? course.modules
-    : Array.isArray(course?.attributes?.modules) ? course.attributes.modules
-    : [];
-  const courseLanguages = Array.isArray(course.course_language) ? course.course_language : [];
+  const courseAttributes = course?.attributes || course || {};
+  const rawModules = Array.isArray(courseAttributes.modules) ? courseAttributes.modules : [];
+  const courseLanguages = Array.isArray(courseAttributes.course_language) ? courseAttributes.course_language : [];
 
   // Card stats should represent one language track, not all language variants together.
   const primaryLanguage = (courseLanguages[0] || '').trim().toLowerCase();
@@ -115,23 +114,52 @@ function normalizeCourse(course) {
     .map((m) => normalizeModuleQuiz(m.quiz, m));
   
   // Extract course group label
-  const groupLabel = course.course_group_label;
+  const rawGroupLabel = courseAttributes.course_group_label;
+  const groupLabel = rawGroupLabel?.data ?? rawGroupLabel;
+  const normalizedGroupLabel = groupLabel?.attributes || groupLabel;
   const courseGroupLabel = groupLabel
     ? {
-        id: groupLabel.id || null,
-        documentId: groupLabel.documentId || null,
-        name: groupLabel.name || '',
+        id: normalizedGroupLabel.id || null,
+        documentId: normalizedGroupLabel.documentId || null,
+        name: normalizedGroupLabel.name || '',
       }
     : null;
+  const feedbackRelation = courseAttributes.feedback?.data ?? courseAttributes.feedback;
+  const rawFeedback = Array.isArray(feedbackRelation) ? feedbackRelation : [];
+  const feedback = rawFeedback.map((rawEntry) => {
+    const entry = rawEntry?.attributes || rawEntry || {};
+    const templateRelation = entry.feedback_template?.data ?? entry.feedback_template;
+    const template = templateRelation?.attributes || templateRelation || {};
+    const questionsRelation = template.questions?.data ?? template.questions;
+    const rawQuestions = Array.isArray(questionsRelation) ? questionsRelation : [];
+    const questions = rawQuestions.map((rawQuestion) => {
+      const question = rawQuestion?.attributes || rawQuestion || {};
+      return {
+        ...question,
+        id: question.id ?? rawQuestion?.id,
+        question_id: question.question_id || '',
+        question: question.question || '',
+        answer_type: question.answer_type || 'Text',
+        mandatory: question.mandatory !== false,
+      };
+    });
+
+    return {
+      ...entry,
+      language: entry.language || '',
+      compulsory: entry.compulsory === true || entry.compulsory === 'true',
+      questions,
+    };
+  });
 
   return {
-    id: course.id,
-    documentId: course.documentId,
-    title: course.title || '',
-    category: course.course_category || 'Other',
+    id: course.id ?? courseAttributes.id,
+    documentId: course.documentId ?? courseAttributes.documentId,
+    title: courseAttributes.title || '',
+    category: courseAttributes.course_category || 'Other',
     courseGroupLabel,
     // UI fields expected by CoursesCategoryPage (original card design)
-    image: withImageUrl(course.thumbnail),
+    image: withImageUrl(courseAttributes.thumbnail),
     moduleDuration: durationMinutes || '',
     duration: durationMinutes > 0 ? Math.round((durationMinutes / 60) * 10) / 10 : 0,
     durationMinutes,
@@ -139,13 +167,7 @@ function normalizeCourse(course) {
     rawModules,                              // raw Strapi format — needed for PUT updates
     modulesList: rawModules.map(normalizeModule),
     quiz,
-    feedback: Array.isArray(course.feedback)
-      ? course.feedback.map(fb => ({
-          ...fb,
-          // Questions now come from the linked Feedback Template
-          questions: Array.isArray(fb.feedback_template?.questions) ? fb.feedback_template.questions : [],
-        }))
-      : [],
+    feedback,
     learners: 0,
     progress: 0,
     completed: false,
@@ -153,13 +175,13 @@ function normalizeCourse(course) {
     contentType: null,
     time: null,
     // Additional metadata
-    minPassingScore: course.min_passing_score || 0,
+    minPassingScore: courseAttributes.min_passing_score || 0,
     languages: courseLanguages,
-    deadline: course.deadline || null,
+    deadline: courseAttributes.deadline || null,
     // Course lineage: all versions of the same course share group_id; version is entered manually in admin.
-    courseVersion: course.course_version || '',
-    groupId: course.group_id || null,
-    active: course.active !== 'unpublished',
+    courseVersion: courseAttributes.course_version || '',
+    groupId: courseAttributes.group_id || null,
+    active: courseAttributes.active !== 'unpublished',
   };
 }
 
@@ -234,6 +256,7 @@ async function fetchCourseDueDateMap() {
 const COURSES_LIST_POPULATE = {
   'populate[thumbnail]': true,
   'populate[course_group_label]': true,
+  'populate[feedback][populate][feedback_template][populate][questions]': true,
   'populate[modules][populate][quiz][populate][quiz_questions][populate][options]': true,
   sort: 'createdAt:desc',
 };
@@ -463,15 +486,27 @@ function isPastDeadline(deadline) {
 function withLearnerProgress(course, progress) {
   const progressStatus = progress?.progress_status ?? course.progressStatus ?? null;
   const completedFromStatus = String(progressStatus || '').trim().toLowerCase() === 'completed';
-  const completed = (progress?.completed ?? completedFromStatus) || course.completed === true;
+  const isCompleted = (progress?.completed ?? completedFromStatus) || course.completed === true;
+  const feedbackSubmitted = progress?.feedback_submitted ?? course.feedbackSubmitted ?? false;
+  const selectedLanguage = String(progress?.selected_language || '').trim().toLowerCase();
+  const feedbackForLanguage = getFeedbackForLanguage(course.feedback, selectedLanguage);
+  const feedbackPending =
+    isCompleted &&
+    feedbackForLanguage?.compulsory === true &&
+    hasFeedbackQuestions(feedbackForLanguage) &&
+    !feedbackSubmitted;
+  const completed = isCompleted && !feedbackPending;
+  const effectiveProgressStatus = feedbackPending ? 'In_progress' : progressStatus;
   const deadline = progress?.due_date || course.deadline || null;
   const isDueDatePassed = isPastDeadline(deadline);
   return {
     ...course,
     completed,
+    selectedLanguage: progress?.selected_language ?? null,
+    feedbackPending,
+    feedbackSubmitted,
     certificationGenerated: progress?.certificate_issued ?? course.certificationGenerated,
-    progressStatus,
-    feedbackSubmitted: progress?.feedback_submitted ?? course.feedbackSubmitted ?? false,
+    progressStatus: effectiveProgressStatus,
     deadline,
     isDeadlineLocked: !completed && isDueDatePassed,
     isDueDatePassed,
