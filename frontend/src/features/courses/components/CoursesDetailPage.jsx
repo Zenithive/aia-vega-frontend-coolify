@@ -212,7 +212,7 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
     const quizTime = Number(currentModule?.quiz?.completion_time);
     const quiz = currentModule?.hasQuiz ? (quizTime > 0 ? quizTime : 30) : 0;
     const type = String(currentModule?.moduleType || '').toLowerCase();
-    const contentLabel = type === 'video' ? 'video' : type === 'offline' ? 'practical' : 'reading';
+    const contentLabel = currentModule?.contentIsOffline ? 'offline' : type === 'video' ? 'video' : type === 'offline' ? 'practical' : 'reading';
     return { content, quiz, total: content + quiz, contentLabel };
   })();
 
@@ -1045,6 +1045,18 @@ export default function CoursesDetailPage({ category, course, selectedModule, in
                       complete and the next module unlocks.
                     </div>
                   )}
+                </div>
+              ) : currentModule?.contentIsOffline ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-8 mt-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <ClipboardCheck className="w-8 h-8 text-primary" />
+                    <div>
+                      <p className="font-semibold text-gray-900">Offline content</p>
+                      <p className="text-sm text-gray-600">
+                        Complete this module’s content offline. You can take the online quiz directly from this module in the course list once you have finished the content.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : currentModule?.moduleType === 'Video' ? (
                 <>

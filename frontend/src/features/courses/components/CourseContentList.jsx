@@ -143,8 +143,9 @@ export default function CourseContentList({ contents, current, onSelect, courseI
           const isSelected = String(activeModuleId) === String(modId);
           const state = hasServerState ? stateById.get(String(module.moduleId)) : null;
           const isOffline = module.moduleKind === 'Offline';
+          const offlineContentWithQuiz = module.contentIsOffline && module.hasQuiz;
           // Content read (Mark as Read) vs module completed (content + quiz passed / offline assessed)
-          const isRead = state ? state.content_completed : module.mark_as_read;
+          const isRead = state ? state.content_completed : offlineContentWithQuiz || module.mark_as_read;
           const isCompleted = state ? state.completed : module.mark_as_read;
           const nextModule = modules[idx + 1] || null;
           const isLocked = state ? !state.unlocked : !allCompleted && firstUnreadIdx >= 0 && idx > firstUnreadIdx;
@@ -186,7 +187,11 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                     {module.moduleTitle || 'Untitled Module'}
                   </span>
                   <span className="text-xs text-gray-400">
-                    {isOffline ? 'Offline · practical assessment' : module.moduleType || 'Unknown'}
+                    {isOffline
+                      ? 'Offline · practical assessment'
+                      : module.contentIsOffline
+                        ? 'Offline content'
+                        : module.moduleType || 'Unknown'}
                     {typeof module.moduleDuration === 'number' && module.moduleDuration > 0
                       ? ` • ${module.moduleDuration} min`
                       : ''}
@@ -224,6 +229,10 @@ export default function CourseContentList({ contents, current, onSelect, courseI
                       >
                         {isCompleted ? <ClipboardCheck className="w-4 h-4" /> : <Hourglass className="w-4 h-4" />}
                         {isCompleted ? 'Assessed' : isLocked ? 'Locked' : 'Awaiting assessment'}
+                      </div>
+                    ) : offlineContentWithQuiz ? (
+                      <div className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl h-10 text-sm font-semibold border bg-primary/5 border-primary/20 text-primary">
+                        Content is  offline
                       </div>
                     ) : (
                     /* Mark as Read */

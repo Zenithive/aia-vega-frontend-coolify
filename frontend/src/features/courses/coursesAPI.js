@@ -62,14 +62,15 @@ function normalizeModule(module, index) {
 
   const moduleKind = module.module_type === 'Offline' ? 'Offline' : 'Online';
   const quiz = moduleKind === 'Online' ? normalizeModuleQuiz(module.quiz, module) : null;
+  const contentIsOffline = moduleKind === 'Online' && module.content_is_offline === true;
 
   return {
     id: module.id,
     moduleId: module.module_id || '',
     moduleNumber: index + 1,
     moduleTitle: module.title || '',
-    // Online modules have content (+ optional quiz); Offline modules are practical sessions assessed in person.
     moduleKind,
+    contentIsOffline,
     quiz,
     hasQuiz: !!quiz && quiz.quiz_questions.length > 0,
     moduleType: moduleKind === 'Offline' ? 'Offline' : module.module_content_type || 'Text',
