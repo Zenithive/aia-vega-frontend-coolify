@@ -1,7 +1,6 @@
 import api from '@/services/api';
 import API_ENDPOINTS from '@/services/endpoints';
 import { getCurrentUserId } from '@/lib/auth';
-import { USE_MOCK_DATA, mockDelay, MOCK_COURSE_CATEGORIES } from '@/services/mockData';
 import { getFeedbackForLanguage, hasFeedbackQuestions } from './feedbackUtils';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337/api').replace(/\/api\/?$/, '');
@@ -268,16 +267,6 @@ const COURSES_LIST_PARAMS = {
 };
 
 export const fetchAllCourses = async ({ page = 1, pageSize = 9 } = {}) => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    const items = MOCK_COURSE_CATEGORIES;
-    return {
-      items,
-      totalCount: items.length,
-      totalPages: 1,
-      currentPage: 1,
-    };
-  }
   const response = await api.get(API_ENDPOINTS.COURSES.LIST, {
     params: {
       ...COURSES_LIST_PARAMS,
@@ -533,11 +522,6 @@ export const fetchCourseCategories = fetchAllCourses;
  * Returns all available group labels regardless of course assignment.
  */
 export const fetchAllCourseGroupLabels = async () => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(200);
-    return [];
-  }
-
   try {
     // Fetch all published group labels directly from the course-group-labels endpoint
     const response = await api.get('/course-group-labels', {
@@ -570,11 +554,6 @@ export const fetchAllCourseGroupLabels = async () => {
  * @param {string} category - Course category (e.g., 'mandatory', 'orientation', 'other')
  */
 export const fetchCourseGroupLabelsByCategory = async (category) => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(200);
-    return [];
-  }
-
   try {
     const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
     
@@ -611,11 +590,6 @@ export const fetchCourseGroupLabelsByCategory = async (category) => {
  * @param {number} params.pageSize - Items per page (default: 3)
  */
 export const fetchCoursesByGroupLabel = async ({ category, groupLabelId, page = 1, pageSize = 3, search = '' }) => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    return { items: [], totalCount: 0, totalPages: 0, currentPage: 1 };
-  }
-
   try {
     const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
     

@@ -3,7 +3,6 @@
  * Slice (newsSlice) uses these and updates the store.
  */
 import api from '@/services/api';
-import { USE_MOCK_DATA, mockDelay, MOCK_NEWS_DATA } from '@/services/mockData';
 import { STORAGE_KEYS } from '@/lib/constants';
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:1337').replace(/\/api\/?$/, '');
@@ -101,16 +100,6 @@ async function fetchNewsInternal(params = {}) {
 
 /** Fetch ALL news (no filter). Used for the "View all news" listing page. Filters by user company (AIA/Vega) when applicable. */
 export async function fetchAllNews({ page = 1, pageSize = 9 } = {}) {
-  if (USE_MOCK_DATA) {
-    await mockDelay();
-    const items = MOCK_NEWS_DATA.map((item) => withImageUrl(item));
-    return { 
-      items: items, 
-      totalCount: items.length,
-      totalPages: 1,
-      currentPage: 1
-    };
-  }
   const res = await api.get('/news-items', {
     params: { 
       populate: '*', 
@@ -135,10 +124,6 @@ export async function fetchAllNews({ page = 1, pageSize = 9 } = {}) {
 
 /** Fetch news categories for the filter dropdown. Filters by user company (AIA/Vega) when applicable. */
 export async function fetchNewsCategories() {
-  if (USE_MOCK_DATA) {
-    await mockDelay(200);
-    return [];
-  }
   const company = normalizeCompanyForFilter(getCurrentUserCompany());
   const params = { 'filters[active][$eq]': true, sort: 'name:asc' };
   if (company) {
@@ -150,24 +135,6 @@ export async function fetchNewsCategories() {
 }
 
 export async function fetchNewsByCategory(categoryIdOrName, { page = 1, pageSize = 9 } = {}) {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    const filtered =
-      !categoryIdOrName || categoryIdOrName === 'all'
-        ? MOCK_NEWS_DATA
-        : MOCK_NEWS_DATA.filter(
-            (n) =>
-              n.news_category?.name?.toLowerCase() === String(categoryIdOrName).toLowerCase() ||
-              String(n.news_category?.id) === String(categoryIdOrName)
-          );
-    const items = filtered.map((item) => withImageUrl(item));
-    return {
-      items,
-      totalCount: items.length,
-      totalPages: 1,
-      currentPage: 1
-    };
-  }
   // Strapi: filter by news_category relation (by name or documentId)
   let params = { page, pageSize };
   if (categoryIdOrName && categoryIdOrName !== 'all') {
@@ -199,14 +166,6 @@ async function fetchNewsInternalPaginated(params = {}) {
 
 /** Fetch a single news by id (numeric) or documentId (Strapi v5). Used for detail page. */
 export async function fetchNewsById(id) {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    const found = MOCK_NEWS_DATA.find(
-      (n) => String(n.id) === String(id) || (n.documentId && String(n.documentId) === String(id))
-    );
-    return found ? withImageUrl(found, 'medium') : null;
-  }
-
   const res = await api.get(`/news-items/${id}`, {
     // Strapi v5: populate: '*' populates all relations, including likes
     params: { populate: '*' },

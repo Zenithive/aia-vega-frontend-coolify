@@ -2,8 +2,6 @@
  * Calendar events API – only API calls. No Redux.
  */
 import api from '@/services/api';
-import { USE_MOCK_DATA, mockDelay } from '@/services/mockData';
-import { MOCK_CALENDAR_EVENTS, MOCK_CALENDAR_HOLIDAYS } from '@/services/mockData';
 import { fetchEmployeeBirthdays, fetchEmployeeAnniversaries } from '@/features/people/peopleAPI';
 
 const DEFAULT_EVENT_COLOR = '#2563EB';
@@ -94,10 +92,6 @@ export async function fetchEventTypes() {
 
 /** GET /events – all events for the calendar (no homepage filter) */
 export async function fetchEvents() {
-  if (USE_MOCK_DATA) {
-    await mockDelay(400);
-    return MOCK_CALENDAR_EVENTS;
-  }
   const res = await api.get('/events', {
     params: { sort: 'start_date:asc', 'populate[work_locations]': true },
   });
@@ -108,11 +102,6 @@ export async function fetchEvents() {
 
 /** GET /events/{documentId} – single event for detail view */
 export async function fetchEventById(documentId) {
-  if (USE_MOCK_DATA) {
-    await mockDelay(200);
-    const found = MOCK_CALENDAR_EVENTS.find((e) => String(e.id) === String(documentId));
-    return found ?? null;
-  }
   const res = await api.get(`/events/${documentId}`);
   const data = res?.data;
   if (!data) return null;
@@ -140,10 +129,6 @@ function normalizeHoliday(item) {
 
 /** GET /holidays – all holidays for the calendar */
 export async function fetchHolidays() {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    return MOCK_CALENDAR_HOLIDAYS;
-  }
   const res = await api.get('/holidays', {
     params: { sort: 'date:asc', 'populate[work_locations]': true },
   });

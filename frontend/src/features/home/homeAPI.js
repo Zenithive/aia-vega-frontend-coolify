@@ -1,49 +1,37 @@
 import api from '@/services/api';
 import API_ENDPOINTS from '@/services/endpoints';
-import { USE_MOCK_DATA, mockDelay, MOCK_HOME_DATA } from '@/services/mockData';
 import { getAvatarPropsForEmployee } from '@/lib/avatar';
 import { fetchAllAnalyticsEmployees } from '@/services/analyticsEmployeesPagination';
 import { NEW_JOINEE_DAYS, isNewJoinee } from '@/lib/newJoinee';
 
 export const fetchDashboardData = async () => {
-  const rest = USE_MOCK_DATA
-    ? await mockDelay().then(() => MOCK_HOME_DATA.dashboard)
-    : await Promise.resolve(MOCK_HOME_DATA.dashboard);
-  if (!USE_MOCK_DATA) {
-    const results = await Promise.allSettled([
-      fetchUpcomingEvents(),
-      fetchNewJoinees(),
-      fetchMyCourses(),
-      fetchQuickLinks(),
-      fetchBirthdaysToday(),
-      fetchWorkAnniversaries(),
-    ]);
-    const [eventsRes, newJoineesRes, coursesRes, quickLinksRes, birthdaysRes, anniversariesRes] = results;
+  const results = await Promise.allSettled([
+    fetchUpcomingEvents(),
+    fetchNewJoinees(),
+    fetchMyCourses(),
+    fetchQuickLinks(),
+    fetchBirthdaysToday(),
+    fetchWorkAnniversaries(),
+  ]);
+  const [eventsRes, newJoineesRes, coursesRes, quickLinksRes, birthdaysRes, anniversariesRes] = results;
 
-    const pickOrEmpty = (res, label) => {
-      if (res.status === 'fulfilled') return Array.isArray(res.value) ? res.value : [];
-      console.warn(`[home] ${label} fetch failed:`, res.reason?.message || res.reason);
-      return [];
-    };
+  const pickOrEmpty = (res, label) => {
+    if (res.status === 'fulfilled') return Array.isArray(res.value) ? res.value : [];
+    console.warn(`[home] ${label} fetch failed:`, res.reason?.message || res.reason);
+    return [];
+  };
 
-    const events = pickOrEmpty(eventsRes, 'events');
-    const newJoinees = pickOrEmpty(newJoineesRes, 'new joinees');
-    const courses = pickOrEmpty(coursesRes, 'courses');
-    const quickLinks = pickOrEmpty(quickLinksRes, 'quick links');
-    const birthdays = pickOrEmpty(birthdaysRes, 'birthdays');
-    const anniversaries = pickOrEmpty(anniversariesRes, 'anniversaries');
-
-    return { ...rest, events, newJoinees, courses, quickLinks, birthdays, anniversaries };
-  }
-  return { ...rest };
+  return {
+    events: pickOrEmpty(eventsRes, 'events'),
+    newJoinees: pickOrEmpty(newJoineesRes, 'new joinees'),
+    courses: pickOrEmpty(coursesRes, 'courses'),
+    quickLinks: pickOrEmpty(quickLinksRes, 'quick links'),
+    birthdays: pickOrEmpty(birthdaysRes, 'birthdays'),
+    anniversaries: pickOrEmpty(anniversariesRes, 'anniversaries'),
+  };
 };
 
 export const fetchQuickLinks = async () => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    return [...MOCK_HOME_DATA.quickLinks];
-  }
-
   let response;
   try {
     response = await api.get('/important-links', {
@@ -139,11 +127,6 @@ function normalizeEvent(item) {
 }
 
 export const fetchUpcomingEvents = async () => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(400);
-    return MOCK_HOME_DATA.events;
-  }
-
   let res;
   try {
     res = await api.get('/events', {
@@ -224,15 +207,6 @@ function unwrapUserResponse(response) {
 export const fetchNewJoineeById = async (id) => {
   if (!id) return null;
 
-  if (USE_MOCK_DATA) {
-    await mockDelay(300);
-    const joinee = MOCK_HOME_DATA.newJoinees.find(
-      (j) => String(j.id) === String(id) || String(j.documentId) === String(id)
-    );
-    if (!joinee) return null;
-    return joinee;
-  }
-
   const response = await api.get(API_ENDPOINTS.USERS.GET(id), {
     params: {
       'populate[photograph]': true,
@@ -262,17 +236,6 @@ function toUtcDateStringDaysAgo(daysAgo) {
 }
 
 export const fetchNewJoinees = async () => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(400);
-    const today = new Date();
-    const cutoff = new Date(today);
-    cutoff.setDate(cutoff.getDate() - NEW_JOINEE_DAYS);
-    return MOCK_HOME_DATA.newJoinees
-      .filter((j) => j.joinDate && new Date(j.joinDate) >= cutoff)
-      .sort((a, b) => new Date(b.joinDate) - new Date(a.joinDate))
-      .slice(0, 6);
-  }
-
   const company = normalizeCompanyForFilter(getCurrentUserCompany());
   const cutoffDate = toUtcDateStringDaysAgo(NEW_JOINEE_DAYS);
   const baseParams = {
@@ -414,10 +377,6 @@ async function fetchCourseDueDateMap() {
 }
 
 export const fetchMyCourses = async () => {
-  if (USE_MOCK_DATA) {
-    await mockDelay(500);
-    return MOCK_HOME_DATA.courses;
-  }
   const userId = getCurrentUserId();
 
   // Three parallel calls: courses list + all user progress + assignment due dates

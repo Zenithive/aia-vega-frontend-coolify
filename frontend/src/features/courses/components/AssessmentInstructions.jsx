@@ -18,10 +18,6 @@ import {
   XCircle,
   Circle,
 } from "lucide-react";
-import {
-  MOCK_COURSES_CATEGORY_LIST,
-  MOCK_ASSESSMENT_DATA,
-} from "@/services/mockData";
 import AssessmentQuiz from "./AssessmentQuiz";
 import { getLatestSubmission, checkPendingReattemptRequest } from "../quizSubmissionAPI";
 import { getCurrentUserId } from "@/lib/auth";
@@ -177,7 +173,6 @@ export default function AssessmentInstructions(props) {
   const router = useRouter();
   // Debug: log the received quiz prop
   if (typeof window !== "undefined") {
-    // eslint-disable-next-line no-console
     console.log("AssessmentInstructions quiz prop:", props.quiz);
   }
   const [category, setCategory] = useState(props.category || "");
@@ -191,40 +186,22 @@ export default function AssessmentInstructions(props) {
   const [blockCheckLoading, setBlockCheckLoading] = useState(true);
   const [startingAssessment, setStartingAssessment] = useState(false);
 
-const { subtitle, notice, instructionCards: mockInstructionCards, checklist: mockChecklist, buttonText } =
-  MOCK_ASSESSMENT_DATA;
-
-  // Build instruction cards: prefer API quiz_instruction, fall back to mock
+  // Build instruction cards and checklist from the course's quiz configuration.
   const apiInstructions = props.quiz?.quiz_instruction;
-  const instructionCards =
-    Array.isArray(apiInstructions) && apiInstructions.length > 0
-      ? apiInstructions.map((instr, idx) => ({
-          title: instr.name,
-          description: instr.description,
-          icon: instr.icon,
-        }))
-      : mockInstructionCards && mockInstructionCards.length > 0
-        ? mockInstructionCards
-        : [
-            {
-              title: "No instructions available",
-              description: "No assessment instructions found for this course.",
-              icon: "HelpCircle",
-            },
-          ];
+  const instructionCards = Array.isArray(apiInstructions)
+    ? apiInstructions.map((instr) => ({
+        title: instr.name,
+        description: instr.description,
+        icon: instr.icon,
+      }))
+    : [];
 
   const apiChecklist = Array.isArray(props.quiz?.quiz_instruction)
     ? props.quiz.quiz_instruction.flatMap((instr) =>
         Array.isArray(instr.checklist) ? instr.checklist : []
       )
     : [];
-  const checklist =
-    apiChecklist.length > 0
-      ? {
-          subtitle: mockChecklist?.subtitle || "",
-          items: apiChecklist.map((item) => item.description),
-        }
-      : mockChecklist;
+  const checklistItems = apiChecklist.map((item) => item.description).filter(Boolean);
 
   useEffect(() => {
     let _category = props.category;
@@ -243,9 +220,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
     if (props.courseName) {
       setCourseName(props.courseName);
     } else if (_category && _courseId) {
-      const courses = MOCK_COURSES_CATEGORY_LIST[_category] || [];
-      const courseObj = courses.find((c) => String(c.id) === String(_courseId));
-      setCourseName(courseObj ? courseObj.title : _courseId);
+      setCourseName(_courseId);
     }
   }, [props.category, props.courseId, props.courseName]);
 
@@ -288,8 +263,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
     return () => { cancelled = true; };
   }, [props.userId, props.courseNumericId, props.moduleId]);
 
-  // Prepare quiz questions and result data for AssessmentQuiz
-  // Support both quiz_questions (from API) and questions (legacy/mock)
+  // Support both current and legacy API response shapes.
   let quizQuestions = undefined;
   if (
     Array.isArray(props.quiz?.quiz_questions) &&
@@ -302,8 +276,6 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
   ) {
     quizQuestions = props.quiz.questions;
   }
-  const resultData = props.quiz?.resultData; // optional, fallback to mock in AssessmentQuiz
-
   const feedbackForLang = getFeedbackForLanguage(props.feedback, props.quiz?.language);
   const feedbackQuestions = feedbackForLang?.questions || [];
   const feedbackCompulsory =
@@ -321,7 +293,6 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
         courseVersion={props.courseVersion || null}
         userId={props.userId ?? getCurrentUserId()}
         quizQuestions={quizQuestions}
-        resultData={resultData}
         feedbackQuestions={isFinalModule ? feedbackQuestions : []}
         feedbackCompulsory={isFinalModule ? feedbackCompulsory : false}
         quizDuration={props.quiz?.completion_time}
@@ -385,7 +356,7 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
             />
           ) : (
           <>
-          <p className="text-muted-foreground mb-6">{subtitle}</p>
+          <p className="text-muted-foreground mb-6">Review the assessment instructions before starting.</p>
 
           {/* Quiz language differs from selected course language */}
           {props.quizLanguageMismatch && props.quiz?.language && (
@@ -401,22 +372,9 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
             </div>
           )}
 
-          {/* Important Notice */}
-          <div className="rounded-xl p-5 mb-8 flex items-start gap-3 border border-warning bg-orange-light">
-            <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-warning-light-bg">
-              <Info className="w-4 h-4 text-warning" />
-            </div>
-            <div>
-              <span className="font-semibold text-xl text-warning">
-                {notice.title}
-              </span>
-              <p className="text-gray mt-1">{notice.description}</p>
-            </div>
-          </div>
-
           {/* Instructions Grid — 2 columns */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
-            {instructionCards.map((card, idx) => {
+            {instructionCards.length ? instructionCards.map((card, idx) => {
               let iconElement = null;
               if (
                 card.icon &&
@@ -468,19 +426,20 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
                   </div>
                 </div>
               );
-            })}
+            }) : (
+              <p className="text-muted-foreground">No assessment instructions are available.</p>
+            )}
           </div>
 
           {/* Pre-Assessment Checklist */}
-          {checklist && checklist.subtitle && (
+          {checklistItems.length > 0 && (
             <div className="mb-10">
               <h2 className="text-xl font-bold text-gray-900 mb-4">
                 Pre-Assessment Checklist
               </h2>
               <div className="bg-white border border-gray-200 rounded-xl p-6">
-                  <p className="mb-4">{checklist.subtitle}</p>
                   <ul className="flex flex-col gap-3">
-                    {Array.isArray(checklist.items) && checklist.items.map((item, idx) => (
+                    {checklistItems.map((item, idx) => (
                       <li key={idx} className="flex items-center gap-2.5">
                         <ArrowRight className="w-4 h-4 shrink-0" />
                         <span>{item}</span>
@@ -493,6 +452,9 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
 
           {/* Start Assessment Button */}
           <div className="flex flex-col items-center gap-4">
+            {!quizQuestions?.length && (
+              <p className="text-destructive">No quiz questions are available for this assessment.</p>
+            )}
             <button
               onClick={async () => {
                 if (blockCheckLoading || startingAssessment) return;
@@ -515,10 +477,10 @@ const { subtitle, notice, instructionCards: mockInstructionCards, checklist: moc
                   setQuizStarted(true);
                 }
               }}
-              disabled={blockCheckLoading || startingAssessment}
+              disabled={blockCheckLoading || startingAssessment || !quizQuestions?.length}
               className="bg-primary hover:bg-primary/90 text-white font-semibold py-3 px-10 rounded-xl shadow transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {blockCheckLoading ? "Checking..." : startingAssessment ? "Loading quiz..." : buttonText}
+              {blockCheckLoading ? "Checking..." : startingAssessment ? "Loading quiz..." : "Start Assessment"}
             </button>
           </div>
           </>

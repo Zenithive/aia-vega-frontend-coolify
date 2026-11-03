@@ -13,10 +13,6 @@ import {
   PenLine,
   Hourglass,
 } from "lucide-react";
-import {
-  MOCK_ASSESSMENT_QUESTIONS,
-  MOCK_ASSESSMENT_RESULTS,
-} from "@/services/mockData";
 import { submitQuiz, getLatestSubmission, sendReattemptRequest, checkPendingReattemptRequest } from "../quizSubmissionAPI";
 import FeedbackForm from "./FeedbackForm";
 import LayoutShell from "@/components/layout/LayoutShell";
@@ -45,7 +41,6 @@ const writeReattemptMarker = (userId, courseId, value) => {
 function ResultScreen({
   passed,
   score,
-  resultData,
   onBackToCourses,
   onTryAgain,
   onSendReattemptRequest,
@@ -112,7 +107,7 @@ function ResultScreen({
             {passHeading}
           </h2>
           <p className="font-semibold text-foreground/60 leading-relaxed mb-4">
-            {resultData.pass.message}
+            Congratulations! You passed the quiz.
           </p>
           {normalizedAttemptNumber !== undefined && normalizedMaxAttempt !== undefined && (
             <p className="text-sm font-semibold text-foreground/60 mb-2">
@@ -120,7 +115,7 @@ function ResultScreen({
             </p>
           )}
           <p className="text-xs font-semibold text-foreground/60 leading-relaxed mb-8">
-            {resultData.pass.subMessage}
+            Your course progress has been updated.
           </p>
           <div className="flex flex-col gap-3">
             {showFeedback && (
@@ -143,7 +138,7 @@ function ResultScreen({
               disabled={!canGoBack}
               className={backButtonClass}
             >
-              {continueLabel || resultData.pass.buttonText}
+              {continueLabel || "Back to Courses"}
             </button>
           </div>
           {showFeedback && feedbackMandatory && !feedbackSubmitted && (
@@ -174,7 +169,7 @@ function ResultScreen({
         <p className="text-sm font-medium text-error leading-relaxed mb-4">
           {reattemptRequired
             ? `You have used all ${normalizedMaxAttempt ?? maxAttempt} attempt(s). Please request a reattempt from your administrator.`
-            : resultData.fail.message}
+            : "You did not meet the passing score for this quiz."}
         </p>
         {normalizedAttemptNumber !== undefined && normalizedMaxAttempt !== undefined ? (
           <p className="text-gray-600 mb-3 font-semibold">
@@ -182,14 +177,14 @@ function ResultScreen({
           </p>
         ) : (
           <p className="text-gray-600 mb-3 font-semibold">
-            {resultData.fail.attemptsInfo}
+            Your remaining attempts are subject to this quiz&apos;s attempt limit.
           </p>
         )}
         <p className="text-gray-600 mb-3 font-semibold">
-          {resultData.fail.contactInfo}
+          If you need another attempt, contact your administrator.
         </p>
         <p className="text-xs text-gray-400 leading-relaxed mb-8 font-semibold">
-          {resultData.fail.subMessage}
+          Review the course material before trying again.
         </p>
         <div className="flex flex-col gap-3">
           {reattemptError && (
@@ -202,7 +197,7 @@ function ResultScreen({
               disabled={!canGoBack}
               className={failBackClass}
             >
-              {resultData.fail.secondaryButtonText}
+              Back to Courses
             </button>
             {reattemptRequired && normalizedAttemptNumber != null && normalizedMaxAttempt != null && normalizedAttemptNumber >= normalizedMaxAttempt ? (
               <button
@@ -222,7 +217,7 @@ function ResultScreen({
                 onClick={onTryAgain}
                 className="flex-1 py-3 rounded-xl bg-error/10 border border-error text-error font-semibold hover:bg-error/20 transition cursor-pointer"
               >
-                {resultData.fail.primaryButtonText}
+                Try Again
               </button>
             )}
           </div>
@@ -258,12 +253,12 @@ function getQuestionOptions(question) {
   });
 }
 
-export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, resultData: resultDataProp, feedbackQuestions,courseVersion,feedbackCompulsory, quizDuration, moduleId = null, isFinalModule = true }) {
+export default function AssessmentQuiz({ onExit, courseId, category, courseNumericId, userId, quizQuestions, feedbackQuestions,courseVersion,feedbackCompulsory, quizDuration, moduleId = null, isFinalModule = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const questions = useMemo(() => {
-    const src = Array.isArray(quizQuestions) && quizQuestions.length > 0 ? quizQuestions : MOCK_ASSESSMENT_QUESTIONS;
+    const src = Array.isArray(quizQuestions) ? quizQuestions : [];
     const shuffled = [...src];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -272,7 +267,6 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     return shuffled;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const resultData = resultDataProp || MOCK_ASSESSMENT_RESULTS;
   const totalQuestions = questions.length;
   // Course feedback is only asked after the quiz that completes the course (last module quiz).
   const hasFeedbackForm = isFinalModule && hasFeedbackQuestions({ questions: feedbackQuestions });
@@ -847,6 +841,22 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
     }, 5000);
   };
 
+  if (totalQuestions === 0) {
+    return (
+      <LayoutShell hideSidebar>
+        <PageContainer className="py-8 flex items-center justify-center min-h-[60vh]">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 max-w-2xl w-full text-center">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Quiz unavailable</h2>
+            <p className="text-gray-600 mb-6">No quiz questions are available for this assessment.</p>
+            <button type="button" onClick={onExit} className="py-3 px-6 rounded-xl bg-primary text-white">
+              Back to course
+            </button>
+          </div>
+        </PageContainer>
+      </LayoutShell>
+    );
+  }
+
   if (showFeedbackSuccess) {
     return (
       <LayoutShell hideSidebar>
@@ -939,7 +949,6 @@ export default function AssessmentQuiz({ onExit, courseId, category, courseNumer
       <ResultScreen
         passed={isPassed}
         score={score}
-        resultData={resultData}
         onBackToCourses={handleBackToCourses}
         onTryAgain={handleTryAgain}
         onSendReattemptRequest={handleSendReattemptRequest}
